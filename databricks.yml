@@ -1,0 +1,47 @@
+# Databricks Asset Bundle for PolicyPilot.
+#
+# NOT deployable yet — `host` below is a placeholder. Once an Azure Databricks workspace
+# exists, replace it and run `databricks bundle validate` / `databricks bundle deploy`.
+# See README "Next steps" for the full provisioning checklist (workspace, Unity Catalog,
+# Key Vault-backed secret scope, service principals, GitHub OIDC federation).
+
+bundle:
+  name: policypilot
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity Catalog catalog name for this environment
+    default: policypilot
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: <REPLACE_WITH_DEV_WORKSPACE_URL>
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: policypilot_dev
+
+  staging:
+    mode: production
+    workspace:
+      host: <REPLACE_WITH_STAGING_WORKSPACE_URL>
+      root_path: /Bundles/${bundle.name}/${bundle.target}
+    variables:
+      catalog: policypilot_staging
+    run_as:
+      service_principal_name: <REPLACE_WITH_STAGING_RUN_AS_SP>
+
+  prod:
+    mode: production
+    workspace:
+      host: <REPLACE_WITH_PROD_WORKSPACE_URL>
+      root_path: /Bundles/${bundle.name}/${bundle.target}
+    variables:
+      catalog: policypilot_prod
+    run_as:
+      service_principal_name: <REPLACE_WITH_PROD_RUN_AS_SP>

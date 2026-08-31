@@ -1,0 +1,48 @@
+name: CD (Databricks Asset Bundle)
+
+# Manual-dispatch only for now — this repo has no Azure Databricks workspace or GitHub
+# OIDC federated credential yet. Once provisioned (see README "Next steps"), add the
+# required secrets below and this can be switched to trigger on push to main.
+#
+# Required repo/environment secrets once wired up:
+#   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID (federated identity, no PAT)
+#   DATABRICKS_HOST (per target)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Bundle target to deploy (dev/staging/prod)"
+        required: true
+        default: dev
+
+permissions:
+  id-token: write # required for OIDC
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.target }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install Databricks CLI
+        uses: databricks/setup-cli@main
+
+      - name: Validate bundle
+        run: databricks bundle validate -t ${{ inputs.target }}
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+
+      - name: Deploy bundle
+        run: databricks bundle deploy -t ${{ inputs.target }}
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}

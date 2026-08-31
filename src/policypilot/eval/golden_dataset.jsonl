@@ -1,0 +1,13 @@
+{"ticker": "AAPL", "question": "What business segments or products does Apple describe in its 10-K?"}
+{"ticker": "AAPL", "question": "What risk factors does Apple's 10-K disclose about its supply chain or manufacturing?"}
+{"ticker": "AAPL", "question": "What does Apple's 10-K say about competition in its markets?"}
+{"ticker": "AAPL", "question": "When was Apple's most recent 10-K filed?"}
+{"ticker": "MSFT", "question": "What cloud or AI-related risk factors does Microsoft's 10-K discuss?"}
+{"ticker": "MSFT", "question": "What does Microsoft's 10-K say about its main reportable segments?"}
+{"ticker": "MSFT", "question": "What does Microsoft's 10-K say about cybersecurity risk?"}
+{"ticker": "MSFT", "question": "When was Microsoft's most recent 10-K filed?"}
+{"ticker": "JPM", "question": "What does JPMorgan's 10-K say about credit risk or market risk?"}
+{"ticker": "JPM", "question": "What regulatory risk factors does JPMorgan's 10-K disclose?"}
+{"ticker": "JPM", "question": "What does JPMorgan's 10-K say about its business segments?"}
+{"ticker": "JPM", "question": "When was JPMorgan's most recent 10-K filed?"}
+{"ticker": null, "question": "What is the capital of France?"}

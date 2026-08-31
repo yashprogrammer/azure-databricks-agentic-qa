@@ -1,0 +1,27 @@
+# Lakeflow job: nightly ingestion refresh + golden-set eval.
+# Not runnable until the workspace + cluster/warehouse settings below are filled in.
+
+resources:
+  jobs:
+    policypilot_ingest_and_eval:
+      name: policypilot-ingest-and-eval
+      schedule:
+        quartz_cron_expression: "0 0 3 * * ?" # 03:00 daily
+        timezone_id: "UTC"
+        pause_status: PAUSED # unpause once this is actually deployable
+      tasks:
+        - task_key: ingest
+          python_wheel_task:
+            package_name: policypilot
+            entry_point: run_ingestion
+          existing_cluster_id: <REPLACE_WITH_CLUSTER_ID>
+        - task_key: eval
+          depends_on:
+            - task_key: ingest
+          python_wheel_task:
+            package_name: policypilot
+            entry_point: run_eval
+          existing_cluster_id: <REPLACE_WITH_CLUSTER_ID>
+      email_notifications:
+        on_failure:
+          - <REPLACE_WITH_ALERT_EMAIL>

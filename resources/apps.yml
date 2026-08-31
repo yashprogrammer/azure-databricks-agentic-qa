@@ -1,0 +1,9 @@
+# Databricks App resource: the same Streamlit UI (src/policypilot/app/streamlit_app.py)
+# deployed behind an app service principal. Not deployable until the workspace exists.
+
+resources:
+  apps:
+    policypilot_app:
+      name: policypilot
+      description: Governed regulatory/policy Q&A copilot
+      source_code_path: ../src/policypilot/app
