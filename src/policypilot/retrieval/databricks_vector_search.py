@@ -1,30 +1,63 @@
 """Production VectorStore backend: Databricks Vector Search over a Delta-synced UC table.
 
-Stubbed until a workspace + Unity Catalog metastore exist. Implement once we have:
-  - a UC catalog/schema/volume (see scripts/setup_unity_catalog.py)
-  - a Delta table of filing chunks with a Change Data Feed
-  - a Vector Search endpoint + Delta-sync index over that table
+Uses self-managed embeddings (the `embedding` column in policypilot_dev.filings.chunks,
+computed with the same sentence-transformers model as local dev) so switching from
+LocalChromaVectorStore never changes embedding dimensionality or retrieval semantics —
+only where the vectors live. Provisioning is a one-time click-through in the workspace UI
+(create the endpoint + Delta-Sync index over policypilot_dev.filings.chunks with
+`embedding` as the embedding vector column) — see README "Next steps".
 
-Fill this in with the databricks-vector-search / databricks-sdk clients so it satisfies
-the same VectorStore protocol as LocalChromaVectorStore — no other code should need to
-change when PP_ENV switches from "local" to "databricks".
+New chunks are written directly to the Delta table (see notebooks/seed_chunks_table.py);
+the Delta-Sync index picks them up automatically via Change Data Feed, so `upsert` here
+is intentionally not the ingestion path — it exists only to satisfy the VectorStore
+protocol for any code that calls it generically.
 """
 
 from __future__ import annotations
 
+from policypilot.config import EMBEDDING_MODEL
 from policypilot.retrieval.base import SearchResult
+
+RESULT_COLUMNS = ["chunk_id", "text", "ticker", "company", "filing_date", "accession_number"]
 
 
 class DatabricksVectorSearchStore:
     def __init__(self, *, endpoint_name: str, index_name: str):
-        raise NotImplementedError(
-            "DatabricksVectorSearchStore requires a provisioned Databricks workspace and "
-            "Vector Search endpoint. See README 'Next steps' for the provisioning checklist, "
-            "then implement this class against the databricks-vector-search SDK."
-        )
+        from databricks.vector_search.client import VectorSearchClient
+        from sentence_transformers import SentenceTransformer
+
+        self._client = VectorSearchClient()
+        self._index = self._client.get_index(endpoint_name=endpoint_name, index_name=index_name)
+        self._embedder = SentenceTransformer(EMBEDDING_MODEL)
 
     def upsert(self, ids: list[str], texts: list[str], metadatas: list[dict]) -> None:
-        raise NotImplementedError
+        raise NotImplementedError(
+            "Write new chunks to policypilot_dev.filings.chunks directly (see "
+            "notebooks/seed_chunks_table.py) — the Delta-Sync index picks up changes "
+            "automatically via Change Data Feed."
+        )
 
     def search(self, query: str, k: int = 5) -> list[SearchResult]:
-        raise NotImplementedError
+        query_vector = self._embedder.encode([query], show_progress_bar=False)[0].tolist()
+        raw = self._index.similarity_search(
+            query_vector=query_vector,
+            columns=RESULT_COLUMNS,
+            num_results=k,
+        )
+        rows = raw.get("result", {}).get("data_array", [])
+        results = []
+        for row in rows:
+            _chunk_id, text, ticker, company, filing_date, accession_number, score = row
+            results.append(
+                SearchResult(
+                    text=text,
+                    score=float(score),
+                    metadata={
+                        "ticker": ticker,
+                        "company": company,
+                        "filing_date": filing_date,
+                        "accession_number": accession_number,
+                    },
+                )
+            )
+        return results

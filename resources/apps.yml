@@ -1,9 +1,18 @@
-# Databricks App resource: the same Streamlit UI (src/policypilot/app/streamlit_app.py)
-# deployed behind an app service principal. Not deployable until the workspace exists.
+# Databricks App resource: deploys the WHOLE repo (not just app/), because
+# streamlit_app.py imports the full `policypilot` package (agent, retrieval, ingestion).
+# app.yaml (repo root) has the run command + env vars; requirements.txt (repo root) has
+# the pip dependencies. The `groq-key` resource binds our Key Vault-backed secret scope
+# so GROQ_API_KEY is injected without ever touching a plaintext secret in this bundle.
 
 resources:
   apps:
     policypilot_app:
       name: policypilot
       description: Governed regulatory/policy Q&A copilot
-      source_code_path: ../src/policypilot/app
+      source_code_path: ..
+      resources:
+        - name: groq-key
+          secret:
+            scope: policypilot-kv-scope
+            key: groq-api-key
+            permission: READ

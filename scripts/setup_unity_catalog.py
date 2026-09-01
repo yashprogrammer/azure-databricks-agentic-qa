@@ -1,22 +1,25 @@
-"""One-time Unity Catalog setup for PolicyPilot. NOT runnable yet — requires a real
-Databricks workspace + Unity Catalog metastore (DATABRICKS_HOST / DATABRICKS_TOKEN in .env).
+"""One-time Unity Catalog setup for PolicyPilot. The dev target's catalog/schema/table
+were created by hand via the workspace UI (see README) — this script exists to reproduce
+that setup idempotently for staging/prod, or to rebuild dev if needed. Requires
+DATABRICKS_HOST / DATABRICKS_TOKEN in .env (a workspace PAT, generated via User Settings
+-> Developer -> Access tokens).
 
 Creates, idempotently:
-  - catalog `policypilot`
-  - schema  `policypilot.filings`
-  - volume  `policypilot.filings.raw_documents` (landing zone for source PDFs/HTML)
-  - table   `policypilot.filings.chunks` (Delta, CDC-enabled for Vector Search sync)
+  - catalog `policypilot_dev` (UC_CATALOG)
+  - schema  `policypilot_dev.filings`
+  - volume  `policypilot_dev.filings.raw_documents` (landing zone for source PDFs/HTML)
+  - table   `policypilot_dev.filings.chunks` (Delta, CDC-enabled for Vector Search sync)
 
-Run once against each target (dev/staging/prod) after provisioning:
+Run once per target after provisioning:
     uv run python scripts/setup_unity_catalog.py
 """
 
 from __future__ import annotations
 
-from policypilot.config import get_settings
+from policypilot.config import UC_CATALOG, UC_SCHEMA, get_settings
 
-CATALOG = "policypilot"
-SCHEMA = "filings"
+CATALOG = UC_CATALOG
+SCHEMA = UC_SCHEMA
 CHUNKS_TABLE_DDL = f"""
 CREATE TABLE IF NOT EXISTS {CATALOG}.{SCHEMA}.chunks (
     chunk_id STRING NOT NULL,

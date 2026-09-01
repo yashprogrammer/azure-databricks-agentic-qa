@@ -1,0 +1,8 @@
+# Databricks App runtime config. Deployed alongside the full repo (see resources/apps.yml)
+# so `streamlit run` finds src/policypilot/app/streamlit_app.py at this same relative path.
+command: ["streamlit", "run", "src/policypilot/app/streamlit_app.py"]
+env:
+  - name: "PP_ENV"
+    value: "databricks"
+  - name: "GROQ_API_KEY"
+    valueFrom: "groq-key"

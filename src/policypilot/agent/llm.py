@@ -1,6 +1,9 @@
-"""Pluggable LLM client: direct Groq API for local dev, Databricks Model Serving
-(via the AI Gateway) once a workspace exists. Both satisfy the same `complete` signature
-so agent/graph.py never needs to know which one it's talking to.
+"""LLM client. Groq is the provider in both local and Databricks deployments right now —
+`GROQ_API_KEY` comes from `.env` locally and from the Key Vault-backed secret scope
+(`policypilot-kv-scope`/`groq-api-key`) once deployed as a Databricks App/Job, injected
+as the same env var either way. Swapping to a Databricks-native model (Foundation Model
+APIs or an Azure OpenAI External Model behind Unity AI Gateway — real "Mosaic AI"
+adoption) is a deliberate future step, not required for the agent to work end-to-end.
 """
 
 from __future__ import annotations
@@ -30,25 +33,11 @@ class GroqLLMClient:
         return response.choices[0].message.content or ""
 
 
-class DatabricksModelServingClient:
-    """Fill in once a Model Serving endpoint is deployed behind the Unity AI Gateway."""
-
-    def __init__(self, *, endpoint_name: str):
-        raise NotImplementedError(
-            "DatabricksModelServingClient requires a deployed Model Serving endpoint. "
-            "See README 'Next steps' for the provisioning checklist."
-        )
-
-    def complete(self, system: str, messages: list[dict]) -> str:
-        raise NotImplementedError
-
-
 def get_llm_client() -> LLMClient:
     settings = get_settings()
-    if settings.is_local:
-        if not settings.groq_api_key:
-            raise RuntimeError(
-                "GROQ_API_KEY is not set. Copy .env.example to .env and add your key."
-            )
-        return GroqLLMClient(api_key=settings.groq_api_key)
-    return DatabricksModelServingClient(endpoint_name="policypilot-agent")
+    if not settings.groq_api_key:
+        raise RuntimeError(
+            "GROQ_API_KEY is not set. Locally: copy .env.example to .env and add your key. "
+            "Deployed: bind the policypilot-kv-scope/groq-api-key secret as this env var."
+        )
+    return GroqLLMClient(api_key=settings.groq_api_key)

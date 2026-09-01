@@ -1,0 +1,16 @@
+# Pip requirements for the Databricks App / Job runtime (Databricks Apps auto-installs
+# this on deploy; it can't read pyproject.toml). Kept in sync by hand with the
+# `dependencies` list in pyproject.toml, plus the "databricks" extra.
+groq>=0.13.0
+langgraph>=0.2.60
+mlflow>=2.18.0
+chromadb>=0.5.20
+sentence-transformers>=3.3.0
+streamlit>=1.40.0
+requests>=2.32.0
+python-dotenv>=1.0.1
+beautifulsoup4>=4.12.3
+pydantic>=2.9.0
+pandas>=2.2.0
+databricks-vectorsearch>=0.40
+databricks-sdk>=0.36.0

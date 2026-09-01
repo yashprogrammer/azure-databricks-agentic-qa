@@ -21,7 +21,7 @@ targets:
     mode: development
     default: true
     workspace:
-      host: <REPLACE_WITH_DEV_WORKSPACE_URL>
+      host: https://adb-7405615537260067.7.azuredatabricks.net
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
     variables:
       catalog: policypilot_dev

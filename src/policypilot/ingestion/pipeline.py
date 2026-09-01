@@ -7,7 +7,14 @@ from __future__ import annotations
 
 import logging
 
-from policypilot.config import DATA_DIR, DEFAULT_TICKERS, RAW_DIR, get_settings
+from policypilot.config import (
+    DATA_DIR,
+    DEFAULT_TICKERS,
+    RAW_DIR,
+    VECTOR_SEARCH_ENDPOINT,
+    VECTOR_SEARCH_INDEX,
+    get_settings,
+)
 from policypilot.ingestion.chunker import chunk_filing
 from policypilot.ingestion.edgar_client import EdgarClient
 from policypilot.ingestion.manifest import record_filing
@@ -25,7 +32,7 @@ def get_vector_store() -> VectorStore:
     from policypilot.retrieval.databricks_vector_search import DatabricksVectorSearchStore
 
     return DatabricksVectorSearchStore(
-        endpoint_name="policypilot_vs_endpoint", index_name="policypilot.filings.chunks_index"
+        endpoint_name=VECTOR_SEARCH_ENDPOINT, index_name=VECTOR_SEARCH_INDEX
     )
 
 

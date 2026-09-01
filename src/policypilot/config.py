@@ -22,6 +22,14 @@ DEFAULT_TICKERS = ["AAPL", "MSFT", "JPM"]
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 GROQ_MODEL = "openai/gpt-oss-120b"
 
+# Unity Catalog / Vector Search resource names — must match whatever's actually
+# provisioned in the workspace (see README "Next steps").
+UC_CATALOG = "policypilot_dev"
+UC_SCHEMA = "filings"
+UC_CHUNKS_TABLE = f"{UC_CATALOG}.{UC_SCHEMA}.chunks"
+VECTOR_SEARCH_ENDPOINT = "policypilot-vs-endpoint"
+VECTOR_SEARCH_INDEX = f"{UC_CATALOG}.{UC_SCHEMA}.chunks_index"
+
 
 @dataclass(frozen=True)
 class Settings:

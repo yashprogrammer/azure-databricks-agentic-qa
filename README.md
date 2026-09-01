@@ -7,27 +7,45 @@ came from, refusing rather than guessing when it can't ground an answer.
 
 ## Status
 
-**Milestone 1 (current): local prototype + cloud-ready scaffold.** No Azure Databricks
-workspace is provisioned yet, so everything here runs locally — real SEC EDGAR filings,
-a local Chroma vector store, Llama via the Groq API directly, and a Streamlit UI.
-The code is structured so that swapping to Databricks Vector Search, Unity Catalog,
-Model Serving, and Databricks Apps is a config change, not a rewrite (see
+**Milestone 1 done: local prototype.** Real SEC EDGAR filings, a local Chroma vector
+store, Llama (via Groq) as the LLM, and a Streamlit UI — all runnable on a laptop with
+no cloud account.
+
+**Milestone 2 in progress: Azure Databricks deployment.** Provisioned so far (Central
+India, resource group `policypilot-rg`): an Azure Databricks workspace (`policypilot-dbx`,
+Premium, Serverless) with Unity Catalog auto-enabled, the `policypilot_dev.filings`
+catalog/schema with a `chunks` Delta table (CDC-enabled), and an Azure Key Vault
+(`policypilot-kv-yp01`) linked to the workspace as an AKV-backed secret scope
+(`policypilot-kv-scope`) holding `groq-api-key`. Still to do: Vector Search endpoint +
+index, GitHub OIDC federation, and the actual `databricks bundle deploy`.
+
+The code is structured so that swapping backends is a config change, not a rewrite (see
 [Architecture](#architecture) below).
 
 ## Architecture
 
-| Layer | Local (now) | Databricks/Azure (next) |
+| Layer | Local | Databricks/Azure |
 |---|---|---|
-| Vector store | `retrieval/local_chroma.py` (Chroma + sentence-transformers) | `retrieval/databricks_vector_search.py` — Vector Search over a UC Delta table |
-| LLM | `agent/llm.py` `GroqLLMClient` (direct API) | `agent/llm.py` `DatabricksModelServingClient` (behind Unity AI Gateway) |
-| Structured lookup | `ingestion/manifest.py` (local JSON) | UC Function over a Delta table |
-| UI | `streamlit run` locally | Databricks App (`resources/apps.yml`) |
-| Ingestion | `python -m policypilot.ingestion.pipeline` | Lakeflow Job (`resources/jobs.yml`), same `run_ingestion()` |
+| Vector store | `retrieval/local_chroma.py` (Chroma + sentence-transformers) | `retrieval/databricks_vector_search.py` — Vector Search over `policypilot_dev.filings.chunks` (implemented, endpoint/index not created yet) |
+| LLM | `agent/llm.py` `GroqLLMClient`, key from `.env` | Same `GroqLLMClient`, key injected from the `policypilot-kv-scope` secret scope as `GROQ_API_KEY` — see [Deferred](#deferred-not-mosaic-ai-yet) |
+| Structured lookup | `ingestion/manifest.py` (local JSON) | UC Function over a Delta table (not built yet) |
+| UI | `streamlit run` locally | Databricks App (`resources/apps.yml` + `app.yaml`, deploys the whole repo since the app imports the full `policypilot` package) |
+| Ingestion | `python -m policypilot.ingestion.pipeline` | `notebooks/seed_chunks_table.py` (manual, self-contained) now; `resources/jobs.yml` Lakeflow job later |
 
-Switch backends via `PP_ENV` in `.env` (`local` or `databricks`). The agent itself
+Switch backends via `PP_ENV` (`local` or `databricks`). The agent itself
 (`agent/graph.py`, a LangGraph plan → retrieve → answer → verify loop) never changes —
 it only talks to the `VectorStore` and `LLMClient` protocols in `retrieval/base.py` and
 `agent/llm.py`.
+
+### Deferred: not Mosaic AI yet
+
+Databricks' "Mosaic AI" branding covers Agent Framework (log an agent to Unity Catalog
+via MLflow, deploy behind Model Serving), Agent Evaluation, and Agent Bricks. This
+project doesn't use it yet — the agent runs as plain LangGraph calling Groq directly,
+even once deployed as a Databricks App. Adopting Mosaic AI Agent Framework (MLflow-log
+the agent in UC, serve it behind Model Serving, optionally swap Groq for a Foundation
+Model API or an Azure OpenAI External Model behind Unity AI Gateway) is a deliberate
+future step, not required for the agent to work end-to-end on Databricks.
 
 The agent is deliberately not a bare RAG chain: `verify_node` is a hard citation gate —
 an answer with no `[n]` citation back to retrieved context is replaced with a refusal
@@ -75,32 +93,29 @@ uv run pytest
 uv run ruff check .
 ```
 
-## Next steps: going from local to Databricks/Azure
+## Next steps
 
-None of this has been done yet — it's the next session's work once you have (or want to
-provision) an Azure subscription:
+Done: Azure Databricks workspace (Central India, Premium, Serverless), Unity Catalog
+(`policypilot_dev.filings.chunks`), Key Vault + AKV-backed secret scope holding the
+Groq key. `databricks.yml`'s `dev` target already points at the real workspace host.
 
-1. **Provision an Azure Databricks workspace** with Unity Catalog enabled (or use an
-   existing one). Note the workspace URL.
-2. **Create an Azure Key Vault** and an Azure Key Vault-backed secret scope in the
-   workspace for the Groq/Azure OpenAI key and any source-system credentials
-   (requires an Entra ID service principal with Contributor/Owner on the vault).
-3. **Run `scripts/setup_unity_catalog.py`** against the new workspace to create the
-   `policypilot` catalog/schema/volume/table.
-4. **Create a Vector Search endpoint** and a Delta-sync index over
-   `policypilot.filings.chunks`; implement `DatabricksVectorSearchStore` in
-   `retrieval/databricks_vector_search.py` against it.
-5. **Deploy an LLM** — either Databricks Foundation Model APIs or an Azure OpenAI
-   External Model behind Unity AI Gateway — and implement `DatabricksModelServingClient`
-   in `agent/llm.py`.
-6. **Fill in `databricks.yml`** target hosts and run-as service principals, and
-   `resources/jobs.yml` / `resources/apps.yml` placeholders (cluster ID, alert email).
-7. **Set up GitHub OIDC**: create an Entra ID app registration with a federated
-   credential trusting this repo, add `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` /
-   `AZURE_SUBSCRIPTION_ID` / `DATABRICKS_HOST` as GitHub environment secrets (per target:
-   dev/staging/prod), then switch `.github/workflows/cd.yml` from manual-dispatch-only to
-   triggering on push to `main`.
-8. **Deploy**: `databricks bundle validate -t dev` then `databricks bundle deploy -t dev`.
+Remaining, in order — the last three are deliberately batched into one short session
+since Vector Search/Model Serving endpoints cost money while running:
+
+1. **GitHub OIDC federation**: an Entra ID app registration + federated credential
+   trusting this repo + a role assignment on `policypilot-rg`, then
+   `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID` / `DATABRICKS_HOST`
+   as GitHub environment secrets. No ongoing cost.
+2. **Seed real data**: run `notebooks/seed_chunks_table.py` in the workspace to populate
+   `policypilot_dev.filings.chunks`.
+3. **Create a Vector Search endpoint** and a Delta-Sync index over
+   `policypilot_dev.filings.chunks` (self-managed embeddings, `embedding` column) —
+   `DatabricksVectorSearchStore` is already implemented against it.
+4. **Deploy**: trigger `.github/workflows/cd.yml` (GitHub Actions "Run workflow" button
+   — runs `databricks bundle deploy` on GitHub's runner, no local CLI needed) to push
+   the Databricks App.
+5. **Test end-to-end**, then delete the Vector Search endpoint and stop the App to stop
+   the meter.
 
 ## Repo layout
 
@@ -112,7 +127,9 @@ src/policypilot/
 ├── agent/                    # LLM client protocol, tools, LangGraph agent
 ├── eval/                     # golden dataset + MLflow eval harness
 └── app/                       # Streamlit chat UI (becomes the Databricks App)
-scripts/setup_unity_catalog.py # UC provisioning (run once against a real workspace)
+notebooks/seed_chunks_table.py # Self-contained: fetch+chunk+embed+write into UC, run in-workspace
+scripts/setup_unity_catalog.py # UC provisioning script (dev catalog was created by hand instead)
 resources/, databricks.yml     # Databricks Asset Bundle (deploy config)
-.github/workflows/              # CI (active) + CD (manual-dispatch, inactive until Azure is wired up)
+app.yaml, requirements.txt     # Databricks App runtime config (repo root, since app.yml deploys the whole repo)
+.github/workflows/              # CI (active) + CD (manual-dispatch, until GitHub OIDC is wired up)
 ```
