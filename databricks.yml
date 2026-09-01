@@ -1,15 +1,17 @@
 # Databricks Asset Bundle for PolicyPilot.
 #
-# NOT deployable yet — `host` below is a placeholder. Once an Azure Databricks workspace
-# exists, replace it and run `databricks bundle validate` / `databricks bundle deploy`.
-# See README "Next steps" for the full provisioning checklist (workspace, Unity Catalog,
-# Key Vault-backed secret scope, service principals, GitHub OIDC federation).
+# `dev` target is real and deployable (workspace, Unity Catalog, Key Vault, GitHub OIDC
+# all provisioned — see README "Status"). `staging`/`prod` hosts and run-as service
+# principals are still placeholders for a future milestone.
 
 bundle:
   name: policypilot
 
 include:
-  - resources/*.yml
+  - resources/apps.yml
+  # resources/jobs.yml is intentionally excluded: it still has placeholder values
+  # (cluster ID, alert email) since the ingestion job isn't wired up yet — data was
+  # seeded manually via notebooks/seed_chunks_table.py instead. Re-add once filled in.
 
 variables:
   catalog:
