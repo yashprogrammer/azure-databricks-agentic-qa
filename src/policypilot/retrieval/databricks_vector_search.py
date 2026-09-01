@@ -15,6 +15,8 @@ protocol for any code that calls it generically.
 
 from __future__ import annotations
 
+import os
+
 from policypilot.config import EMBEDDING_MODEL
 from policypilot.retrieval.base import SearchResult
 
@@ -26,7 +28,15 @@ class DatabricksVectorSearchStore:
         from databricks.vector_search.client import VectorSearchClient
         from sentence_transformers import SentenceTransformer
 
-        self._client = VectorSearchClient()
+        # VectorSearchClient's auto-detection relies on MLflow's notebook-context
+        # resolver, which doesn't apply inside a Databricks App process. Databricks
+        # Apps inject DATABRICKS_HOST/CLIENT_ID/CLIENT_SECRET for the app's own
+        # service principal — pass those explicitly instead.
+        self._client = VectorSearchClient(
+            workspace_url=os.environ.get("DATABRICKS_HOST"),
+            service_principal_client_id=os.environ.get("DATABRICKS_CLIENT_ID"),
+            service_principal_client_secret=os.environ.get("DATABRICKS_CLIENT_SECRET"),
+        )
         self._index = self._client.get_index(endpoint_name=endpoint_name, index_name=index_name)
         self._embedder = SentenceTransformer(EMBEDDING_MODEL)
 
