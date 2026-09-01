@@ -31,9 +31,13 @@ class DatabricksVectorSearchStore:
         # VectorSearchClient's auto-detection relies on MLflow's notebook-context
         # resolver, which doesn't apply inside a Databricks App process. Databricks
         # Apps inject DATABRICKS_HOST/CLIENT_ID/CLIENT_SECRET for the app's own
-        # service principal — pass those explicitly instead.
+        # service principal — pass those explicitly instead. DATABRICKS_HOST is
+        # injected as a bare hostname (no scheme), which the client requires.
+        host = os.environ.get("DATABRICKS_HOST")
+        if host and not host.startswith("http"):
+            host = f"https://{host}"
         self._client = VectorSearchClient(
-            workspace_url=os.environ.get("DATABRICKS_HOST"),
+            workspace_url=host,
             service_principal_client_id=os.environ.get("DATABRICKS_CLIENT_ID"),
             service_principal_client_secret=os.environ.get("DATABRICKS_CLIENT_SECRET"),
         )
