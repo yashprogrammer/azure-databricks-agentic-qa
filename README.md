@@ -11,13 +11,15 @@ came from, refusing rather than guessing when it can't ground an answer.
 store, Llama (via Groq) as the LLM, and a Streamlit UI — all runnable on a laptop with
 no cloud account.
 
-**Milestone 2 in progress: Azure Databricks deployment.** Provisioned so far (Central
-India, resource group `policypilot-rg`): an Azure Databricks workspace (`policypilot-dbx`,
-Premium, Serverless) with Unity Catalog auto-enabled, the `policypilot_dev.filings`
-catalog/schema with a `chunks` Delta table (CDC-enabled), and an Azure Key Vault
-(`policypilot-kv-yp01`) linked to the workspace as an AKV-backed secret scope
-(`policypilot-kv-scope`) holding `groq-api-key`. Still to do: Vector Search endpoint +
-index, GitHub OIDC federation, and the actual `databricks bundle deploy`.
+**Milestone 2 done: deployed and verified on real Azure Databricks.** Workspace, Unity
+Catalog, Key Vault, GitHub OIDC federation, and a live Databricks App were all stood up
+and end-to-end tested — a real deployed question got a grounded, cited answer straight
+from Apple's actual 10-K, served via a Databricks-hosted Vector Search index. The
+Vector Search endpoint and app compute were torn down afterward to stop billing (they
+bill by the hour; everything else — workspace, UC catalog/table, Key Vault, OIDC setup —
+stays up at near-zero cost). See **[docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)**
+for the full step-by-step (including every error hit and how to avoid it) to redo this
+end to end.
 
 The code is structured so that swapping backends is a config change, not a rewrite (see
 [Architecture](#architecture) below).
