@@ -1,0 +1,516 @@
+<title>PolicyPilot Architecture</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --bg: #F2F5F9;
+    --surface: #FFFFFF;
+    --surface-2: #E7ECF3;
+    --ink: #182338;
+    --ink-muted: #5A6478;
+    --border: #D2D9E4;
+    --accent: #C97A1E;
+    --c-identity: #2E5FCE;
+    --c-data: #0E8074;
+    --c-compute: #C8442B;
+    --c-external: #6E52C9;
+    --font-sans: 'IBM Plex Sans', -apple-system, 'Segoe UI', sans-serif;
+    --font-mono: 'IBM Plex Mono', 'SF Mono', Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0E1420;
+      --surface: #161E2E;
+      --surface-2: #1F2A3F;
+      --ink: #E6EBF4;
+      --ink-muted: #98A2B8;
+      --border: #2C3752;
+      --accent: #EFB454;
+      --c-identity: #6E9CFF;
+      --c-data: #3FD3C0;
+      --c-compute: #FF7E62;
+      --c-external: #B49CF0;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0E1420;
+    --surface: #161E2E;
+    --surface-2: #1F2A3F;
+    --ink: #E6EBF4;
+    --ink-muted: #98A2B8;
+    --border: #2C3752;
+    --accent: #EFB454;
+    --c-identity: #6E9CFF;
+    --c-data: #3FD3C0;
+    --c-compute: #FF7E62;
+    --c-external: #B49CF0;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    line-height: 1.55;
+  }
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 56px 28px 90px;
+  }
+
+  header.page-head {
+    margin-bottom: 40px;
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--c-compute);
+    margin: 0 0 10px;
+  }
+  h1 {
+    font-size: clamp(28px, 4vw, 40px);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+  .dek {
+    font-size: 16px;
+    color: var(--ink-muted);
+    max-width: 62ch;
+    margin: 0;
+  }
+
+  .legend-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 24px;
+  }
+  .legend-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 12.5px;
+    color: var(--ink-muted);
+  }
+  .swatch {
+    width: 9px; height: 9px; border-radius: 50%;
+    flex: none;
+  }
+  .swatch.identity { background: var(--c-identity); }
+  .swatch.data { background: var(--c-data); }
+  .swatch.compute { background: var(--c-compute); }
+  .swatch.external { background: var(--c-external); }
+
+  section.block {
+    margin-top: 56px;
+  }
+  h2 {
+    font-size: 22px;
+    font-weight: 700;
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+  .section-sub {
+    color: var(--ink-muted);
+    font-size: 14.5px;
+    margin: 0 0 22px;
+    max-width: 68ch;
+  }
+
+  figure {
+    margin: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+  }
+  figure svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow-x: auto;
+  }
+  figcaption {
+    margin-top: 16px;
+    font-size: 13.5px;
+    color: var(--ink-muted);
+    border-top: 1px solid var(--border);
+    padding-top: 14px;
+  }
+  figcaption b { color: var(--ink); font-weight: 600; }
+
+  svg text { font-family: var(--font-sans); fill: var(--ink); }
+  svg .mono { font-family: var(--font-mono); }
+  svg .title { font-size: 13.5px; font-weight: 600; }
+  svg .sub { font-size: 11px; fill: var(--ink-muted); }
+  svg .lbl { font-size: 11px; fill: var(--ink-muted); }
+  svg .lbl-strong { font-size: 11px; fill: var(--accent); font-weight: 600; }
+  svg .frame-label { font-size: 11.5px; fill: var(--ink-muted); font-family: var(--font-mono); }
+  svg .box { fill: var(--surface); stroke-width: 1.75; }
+  svg .box.identity { stroke: var(--c-identity); }
+  svg .box.data { stroke: var(--c-data); }
+  svg .box.compute { stroke: var(--c-compute); }
+  svg .box.external { stroke: var(--c-external); }
+  svg .box.neutral { stroke: var(--border); }
+  svg .arrow { fill: none; stroke: var(--ink-muted); stroke-width: 1.5; }
+  svg .arrow.dashed { stroke-dasharray: 4 3; }
+  svg .arrow.accent { stroke: var(--accent); stroke-width: 1.75; }
+  svg .frame { fill: none; stroke: var(--border); stroke-width: 1.5; stroke-dasharray: 5 4; }
+  svg .divider { stroke: var(--border); stroke-width: 1.25; }
+  svg .chip-bg { fill: var(--surface-2); }
+
+  table.ref {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    font-size: 14px;
+  }
+  table.ref th {
+    text-align: left;
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-muted);
+    font-weight: 600;
+    padding: 12px 16px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+  }
+  table.ref td {
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  table.ref tr:last-child td { border-bottom: none; }
+  table.ref td.name { font-family: var(--font-mono); font-size: 13px; white-space: nowrap; }
+  table.ref td.cost { color: var(--ink-muted); }
+  .tag {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-weight: 500;
+  }
+  .tag.free { color: var(--c-data); background: color-mix(in srgb, var(--c-data) 14%, transparent); }
+  .tag.billed { color: var(--c-compute); background: color-mix(in srgb, var(--c-compute) 14%, transparent); }
+
+  .overflow-x { overflow-x: auto; }
+
+  footer {
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--ink-muted);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  footer .mono { font-family: var(--font-mono); }
+</style>
+
+<div class="wrap">
+
+  <header class="page-head">
+    <p class="eyebrow">Reference architecture · Azure + Databricks</p>
+    <h1>How PolicyPilot runs on Azure Databricks</h1>
+    <p class="dek">
+      Two mechanisms worth seeing separately: what actually happens when someone asks a
+      question (below), and how the app gets deployed &amp; who's allowed to do what
+      (further down) — the second one is where every real gotcha in this build lived.
+    </p>
+    <div class="legend-strip">
+      <span class="legend-chip"><span class="swatch identity"></span>Identity &amp; security</span>
+      <span class="legend-chip"><span class="swatch data"></span>Data &amp; retrieval</span>
+      <span class="legend-chip"><span class="swatch compute"></span>Compute &amp; serving</span>
+      <span class="legend-chip"><span class="swatch external"></span>External / third-party</span>
+    </div>
+  </header>
+
+  <section class="block">
+    <h2>1. Request flow — what serves a live question</h2>
+    <p class="section-sub">
+      One user question, traced through every hop it actually takes — including the
+      permission each hop needs, since that's what broke in testing.
+    </p>
+    <figure>
+      <svg viewBox="0 0 980 500" role="img" aria-label="A user's question flows from their browser into the Databricks App, which calls the Vector Search index to retrieve filing chunks and the Unity AI Gateway to generate an answer via Groq, then returns a cited answer.">
+
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--ink-muted)"></path>
+          </marker>
+          <marker id="arrow-accent" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"></path>
+          </marker>
+        </defs>
+
+        <!-- User -->
+        <rect class="box external" x="20" y="220" width="120" height="55" rx="8"></rect>
+        <text class="title" x="80" y="244" text-anchor="middle">Your browser</text>
+        <text class="sub" x="80" y="260" text-anchor="middle">Databricks SSO session</text>
+
+        <!-- App -->
+        <rect class="box compute" x="210" y="195" width="230" height="110" rx="8"></rect>
+        <text class="title" x="325" y="220" text-anchor="middle">Databricks App — "policypilot"</text>
+        <text class="sub" x="325" y="238" text-anchor="middle">Streamlit UI + LangGraph agent</text>
+        <text class="sub" x="325" y="252" text-anchor="middle">plan → retrieve → answer → verify</text>
+        <text class="sub mono" x="325" y="272" text-anchor="middle">SP: app-&lt;random&gt;-policypilot</text>
+        <text class="sub mono" x="325" y="286" text-anchor="middle">(auto-created by Databricks Apps)</text>
+
+        <!-- Vector Search Index -->
+        <rect class="box data" x="570" y="30" width="220" height="55" rx="8"></rect>
+        <text class="title" x="680" y="53" text-anchor="middle">Vector Search Index</text>
+        <text class="sub" x="680" y="69" text-anchor="middle">chunks_index · self-managed 384-dim</text>
+
+        <!-- Unity Catalog table -->
+        <rect class="box data" x="570" y="110" width="220" height="55" rx="8"></rect>
+        <text class="title" x="680" y="133" text-anchor="middle">Unity Catalog</text>
+        <text class="sub" x="680" y="149" text-anchor="middle">policypilot_dev.filings.chunks (CDC)</text>
+
+        <!-- table -> index -->
+        <line class="arrow" x1="680" y1="110" x2="680" y2="87" marker-end="url(#arrow)"></line>
+        <text class="lbl" x="694" y="102">Delta Sync</text>
+
+        <!-- Unity AI Gateway -->
+        <rect class="box compute" x="570" y="300" width="240" height="95" rx="8"></rect>
+        <text class="title" x="690" y="323" text-anchor="middle">Model Serving — Unity AI Gateway</text>
+        <text class="sub" x="690" y="341" text-anchor="middle">policypilot-groq-gateway · gpt-oss-120b</text>
+        <text class="sub" x="690" y="357" text-anchor="middle">guardrails: PII · safety · off-topic ·</text>
+        <text class="sub" x="690" y="371" text-anchor="middle">investment-advice</text>
+
+        <!-- Key Vault -->
+        <rect class="box identity" x="570" y="430" width="240" height="50" rx="8"></rect>
+        <text class="title" x="690" y="452" text-anchor="middle">Azure Key Vault</text>
+        <text class="sub" x="690" y="468" text-anchor="middle">secret: groq-api-key</text>
+
+        <!-- keyvault -> gateway -->
+        <line class="arrow dashed" x1="690" y1="430" x2="690" y2="397" marker-end="url(#arrow)"></line>
+        <text class="lbl" x="704" y="418">{{secrets/…}}</text>
+
+        <!-- Groq -->
+        <rect class="box external" x="850" y="325" width="110" height="60" rx="8"></rect>
+        <text class="title" x="905" y="350" text-anchor="middle">Groq API</text>
+        <text class="sub" x="905" y="366" text-anchor="middle">external LLM</text>
+
+        <!-- gateway -> groq -->
+        <line class="arrow" x1="810" y1="347" x2="848" y2="352" marker-end="url(#arrow)"></line>
+
+        <!-- user -> app -->
+        <line class="arrow" x1="140" y1="248" x2="208" y2="248" marker-end="url(#arrow)"></line>
+        <text class="lbl" x="148" y="238">HTTPS</text>
+
+        <!-- app -> return to user (accent, the payoff) -->
+        <path class="arrow accent" d="M270,195 C160,150 90,180 82,218" marker-end="url(#arrow-accent)"></path>
+        <text class="lbl-strong" x="86" y="185">cited answer [1] [2]</text>
+
+        <!-- app -> index -->
+        <line class="arrow" x1="440" y1="220" x2="568" y2="65" marker-end="url(#arrow)"></line>
+        <text class="lbl" x="452" y="150">retrieve(query)</text>
+        <text class="lbl" x="452" y="163">CAN_USE + SELECT</text>
+
+        <!-- app -> gateway -->
+        <line class="arrow" x1="440" y1="280" x2="568" y2="340" marker-end="url(#arrow)"></line>
+        <text class="lbl" x="452" y="300">complete(prompt)</text>
+        <text class="lbl" x="452" y="313">CAN_QUERY</text>
+
+      </svg>
+      <figcaption>
+        The app never talks to Groq directly once deployed — it retrieves from
+        <b>Vector Search</b> and generates through the <b>Unity AI Gateway</b>, which holds
+        the Groq key (from Key Vault) and applies guardrails Groq itself doesn't provide.
+        Both calls run under the app's <b>own</b> auto-created service principal, not the
+        identity that deployed it — that split is the subject of the next diagram.
+      </figcaption>
+    </figure>
+  </section>
+
+  <section class="block">
+    <h2>2. Identity &amp; deploy flow — the part that actually broke</h2>
+    <p class="section-sub">
+      Two <em>different</em> service principals touch this system, at two different
+      times, with two different grant sets. Conflating them is what produced every
+      permission error in this build.
+    </p>
+    <figure>
+      <svg viewBox="0 0 940 610" role="img" aria-label="GitHub Actions exchanges an OIDC token with Microsoft Entra ID, which grants Azure RBAC access used only at deploy time by one service principal, while a separate, auto-created service principal handles all runtime requests — shown on a shared timeline to make clear they never act at the same moment.">
+
+        <defs>
+          <marker id="arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--ink-muted)"></path>
+          </marker>
+        </defs>
+
+        <!-- Trust chain -->
+        <rect class="box external" x="30" y="30" width="220" height="70" rx="8"></rect>
+        <text class="title" x="140" y="58" text-anchor="middle">GitHub Actions — cd.yml</text>
+        <text class="sub" x="140" y="75" text-anchor="middle">environment: dev</text>
+        <text class="sub" x="140" y="89" text-anchor="middle">workflow_dispatch</text>
+
+        <rect class="box identity" x="330" y="30" width="240" height="70" rx="8"></rect>
+        <text class="title" x="450" y="58" text-anchor="middle">Microsoft Entra ID</text>
+        <text class="sub" x="450" y="75" text-anchor="middle">App registration +</text>
+        <text class="sub" x="450" y="89" text-anchor="middle">federated credential (env: dev)</text>
+
+        <rect class="box identity" x="650" y="30" width="260" height="70" rx="8"></rect>
+        <text class="title" x="780" y="58" text-anchor="middle">Azure RBAC</text>
+        <text class="sub" x="780" y="75" text-anchor="middle">Contributor</text>
+        <text class="sub" x="780" y="89" text-anchor="middle">on resource group policypilot-rg</text>
+
+        <line class="arrow" x1="250" y1="65" x2="328" y2="65" marker-end="url(#arrow2)"></line>
+        <text class="lbl" x="256" y="55">OIDC ID token</text>
+        <text class="lbl" x="256" y="115">no stored Azure secret</text>
+
+        <line class="arrow" x1="570" y1="65" x2="648" y2="65" marker-end="url(#arrow2)"></line>
+        <text class="lbl" x="576" y="55">token verified</text>
+
+        <!-- Divider with chip -->
+        <line class="divider" x1="30" y1="150" x2="910" y2="150"></line>
+        <rect class="chip-bg" x="330" y="132" width="280" height="26" rx="13"></rect>
+        <text class="lbl-strong" x="470" y="149" text-anchor="middle">two DIFFERENT service principals from here</text>
+
+        <!-- Left column: deploying SP -->
+        <rect class="box identity" x="40" y="185" width="360" height="120" rx="8"></rect>
+        <text class="title" x="220" y="210" text-anchor="middle">Deploying SP — CI/CD</text>
+        <text class="sub mono" x="220" y="227" text-anchor="middle">policypilot-github-oidc</text>
+        <text class="sub" x="220" y="248" text-anchor="middle">Azure: Contributor on resource group</text>
+        <text class="sub" x="220" y="263" text-anchor="middle">Databricks: workspace SP (linked by App ID)</text>
+        <text class="sub" x="220" y="278" text-anchor="middle">Secret scope: MANAGE on groq-api-key</text>
+        <text class="sub" x="220" y="293" text-anchor="middle">Unity Catalog: USE + SELECT/MODIFY</text>
+
+        <line class="arrow" x1="220" y1="305" x2="220" y2="343" marker-end="url(#arrow2)"></line>
+
+        <rect class="box neutral" x="40" y="345" width="360" height="60" rx="8"></rect>
+        <text class="title" x="220" y="370" text-anchor="middle">databricks bundle deploy</text>
+        <text class="sub" x="220" y="388" text-anchor="middle">registers app + UC objects — does NOT start compute</text>
+
+        <line class="arrow" x1="220" y1="405" x2="220" y2="475" marker-end="url(#arrow2)"></line>
+
+        <!-- Right column: app's own SP -->
+        <rect class="box compute" x="540" y="185" width="360" height="120" rx="8"></rect>
+        <text class="title" x="720" y="210" text-anchor="middle">App's own SP — runtime</text>
+        <text class="sub mono" x="720" y="227" text-anchor="middle">app-&lt;random&gt;-policypilot</text>
+        <text class="sub" x="720" y="248" text-anchor="middle">auto-created — distinct from deploying SP</text>
+        <text class="sub" x="720" y="263" text-anchor="middle">Vector Search: CAN_USE + UC SELECT</text>
+        <text class="sub" x="720" y="278" text-anchor="middle">Serving endpoint: CAN_QUERY</text>
+        <text class="sub" x="720" y="293" text-anchor="middle">Unity Catalog: USE CATALOG/SCHEMA</text>
+
+        <line class="arrow" x1="720" y1="305" x2="720" y2="343" marker-end="url(#arrow2)"></line>
+
+        <rect class="box neutral" x="540" y="345" width="360" height="60" rx="8"></rect>
+        <text class="title" x="720" y="370" text-anchor="middle">Serves live user requests</text>
+        <text class="sub" x="720" y="388" text-anchor="middle">Streamlit process on App compute</text>
+
+        <line class="arrow" x1="720" y1="405" x2="720" y2="475" marker-end="url(#arrow2)"></line>
+
+        <!-- Shared timeline -->
+        <line class="divider" x1="60" y1="500" x2="890" y2="500"></line>
+        <line class="arrow" x1="890" y1="500" x2="905" y2="500" marker-end="url(#arrow2)"></line>
+        <text class="lbl" x="908" y="504">time</text>
+
+        <circle cx="220" cy="500" r="5" fill="var(--c-identity)"></circle>
+        <text class="lbl" x="220" y="525" text-anchor="middle">deploy time</text>
+        <text class="lbl" x="220" y="540" text-anchor="middle">(once, on push)</text>
+
+        <circle cx="720" cy="500" r="5" fill="var(--c-compute)"></circle>
+        <text class="lbl" x="720" y="525" text-anchor="middle">runtime</text>
+        <text class="lbl" x="720" y="540" text-anchor="middle">(continuous, while the app is up)</text>
+
+      </svg>
+      <figcaption>
+        Granting the <b>deploying</b> SP every permission in the book still leaves the app
+        broken at runtime, because the <b>app's own</b> SP — which Databricks creates for
+        you and which you don't choose the name of — is what actually calls Vector Search
+        and the Gateway when a real user asks a question. Both need grants; neither's
+        grants cover the other.
+      </figcaption>
+    </figure>
+  </section>
+
+  <section class="block">
+    <h2>3. Component reference</h2>
+    <p class="section-sub">
+      Everything provisioned, and what it costs to leave sitting there versus running.
+    </p>
+    <div class="overflow-x">
+      <table class="ref">
+        <thead>
+          <tr><th>Component</th><th>Role</th><th>Lifecycle</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="name">policypilot-rg</td>
+            <td>Resource group — holds everything below</td>
+            <td class="cost"><span class="tag free">free</span> just a grouping</td>
+          </tr>
+          <tr>
+            <td class="name">Databricks Workspace</td>
+            <td>Premium, Serverless — hosts UC, SQL, Apps, Model Serving</td>
+            <td class="cost"><span class="tag free">free at rest</span> pay only for compute used</td>
+          </tr>
+          <tr>
+            <td class="name">policypilot_dev.filings.chunks</td>
+            <td>Unity Catalog Delta table — filing chunks + embeddings, CDC-enabled</td>
+            <td class="cost"><span class="tag free">negligible</span> storage only</td>
+          </tr>
+          <tr>
+            <td class="name">Vector Search endpoint + index</td>
+            <td>Serves <span class="mono">retrieve(query)</span> for the agent</td>
+            <td class="cost"><span class="tag billed">bills hourly</span> create last, delete after testing</td>
+          </tr>
+          <tr>
+            <td class="name">SQL Warehouse (2X-Small)</td>
+            <td>Runs SQL Editor queries and GRANT statements</td>
+            <td class="cost"><span class="tag free">near-zero</span> auto-stops after 10 min idle</td>
+          </tr>
+          <tr>
+            <td class="name">Databricks App — policypilot</td>
+            <td>Hosts the Streamlit UI + LangGraph agent</td>
+            <td class="cost"><span class="tag billed">bills while running</span> stop after testing</td>
+          </tr>
+          <tr>
+            <td class="name">policypilot-groq-gateway</td>
+            <td>Unity AI Gateway External Model — proxies Groq, adds guardrails</td>
+            <td class="cost"><span class="tag free">pay-per-token</span> no idle compute behind it</td>
+          </tr>
+          <tr>
+            <td class="name">Azure Key Vault</td>
+            <td>Stores the Groq API key</td>
+            <td class="cost"><span class="tag free">a few cents</span> per-operation pricing</td>
+          </tr>
+          <tr>
+            <td class="name">policypilot-kv-scope</td>
+            <td>AKV-backed secret scope — Databricks' read-only view into the vault</td>
+            <td class="cost"><span class="tag free">free</span></td>
+          </tr>
+          <tr>
+            <td class="name">Entra ID app + federated credential</td>
+            <td>GitHub OIDC trust anchor — no stored Azure secret, ever</td>
+            <td class="cost"><span class="tag free">free</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <span>Built from <span class="mono">docs/DEPLOYMENT_GUIDE.md</span> — every gotcha shown here was hit for real during this build.</span>
+    <span class="mono">policypilot · azure-databricks-agentic-qa</span>
+  </footer>
+
+</div>
