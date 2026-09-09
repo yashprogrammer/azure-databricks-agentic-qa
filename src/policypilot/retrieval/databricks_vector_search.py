@@ -51,13 +51,12 @@ class DatabricksVectorSearchStore:
             "automatically via Change Data Feed."
         )
 
-    def search(self, query: str, k: int = 5) -> list[SearchResult]:
+    def search(self, query: str, k: int = 5, ticker: str | None = None) -> list[SearchResult]:
         query_vector = self._embedder.encode([query], show_progress_bar=False)[0].tolist()
-        raw = self._index.similarity_search(
-            query_vector=query_vector,
-            columns=RESULT_COLUMNS,
-            num_results=k,
-        )
+        search_kwargs = {"query_vector": query_vector, "columns": RESULT_COLUMNS, "num_results": k}
+        if ticker:
+            search_kwargs["filters"] = {"ticker": ticker}
+        raw = self._index.similarity_search(**search_kwargs)
         rows = raw.get("result", {}).get("data_array", [])
         results = []
         for row in rows:

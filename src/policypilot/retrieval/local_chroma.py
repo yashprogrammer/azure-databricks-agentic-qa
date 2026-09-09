@@ -28,9 +28,12 @@ class LocalChromaVectorStore:
             ids=ids, documents=texts, metadatas=metadatas, embeddings=embeddings
         )
 
-    def search(self, query: str, k: int = 5) -> list[SearchResult]:
+    def search(self, query: str, k: int = 5, ticker: str | None = None) -> list[SearchResult]:
         query_embedding = self._embedder.encode([query], show_progress_bar=False).tolist()
-        results = self._collection.query(query_embeddings=query_embedding, n_results=k)
+        query_kwargs = {"query_embeddings": query_embedding, "n_results": k}
+        if ticker:
+            query_kwargs["where"] = {"ticker": ticker}
+        results = self._collection.query(**query_kwargs)
         out: list[SearchResult] = []
         docs = results.get("documents") or [[]]
         metas = results.get("metadatas") or [[]]

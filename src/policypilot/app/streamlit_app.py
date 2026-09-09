@@ -48,15 +48,31 @@ if llm is None:
     )
     st.stop()
 
+def _render_sources(results) -> None:
+    """Map each [n] citation in the answer back to the filing it actually came from."""
+    if not results:
+        return
+    with st.expander(f"Sources ({len(results)})"):
+        for i, r in enumerate(results, start=1):
+            m = r.metadata or {}
+            st.markdown(
+                f"**[{i}] {m.get('company', 'Unknown')}** — 10-K filed "
+                f"{m.get('filing_date', 'unknown date')} "
+                f"(accession {m.get('accession_number', 'unknown')})"
+            )
+            st.caption(r.text[:300] + ("…" if len(r.text) > 300 else ""))
+
+
 if "history" not in st.session_state:
     st.session_state.history = []
 
-for role, content in st.session_state.history:
-    with st.chat_message(role):
-        st.markdown(content)
+for turn in st.session_state.history:
+    with st.chat_message(turn["role"]):
+        st.markdown(turn["content"])
+        _render_sources(turn.get("sources"))
 
 if question := st.chat_input("Ask a question about the ingested filings..."):
-    st.session_state.history.append(("user", question))
+    st.session_state.history.append({"role": "user", "content": question})
     with st.chat_message("user"):
         st.markdown(question)
 
@@ -64,7 +80,12 @@ if question := st.chat_input("Ask a question about the ingested filings..."):
         with st.spinner("Retrieving and answering..."):
             result = ask(llm, store, question)
         answer = result["final_answer"]
+        grounded = result.get("grounded")
+        results = result.get("results") if grounded else None
         st.markdown(answer)
-        if not result.get("grounded"):
+        if not grounded:
             st.caption("⚠️ No grounded citation found — refused rather than guessing.")
-    st.session_state.history.append(("assistant", answer))
+        _render_sources(results)
+    st.session_state.history.append(
+        {"role": "assistant", "content": answer, "sources": results}
+    )

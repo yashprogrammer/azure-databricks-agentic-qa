@@ -9,8 +9,10 @@ from policypilot.ingestion.manifest import load_manifest
 from policypilot.retrieval.base import SearchResult, VectorStore
 
 
-def retrieve(store: VectorStore, query: str, k: int = 5) -> list[SearchResult]:
-    return store.search(query, k=k)
+def retrieve(
+    store: VectorStore, query: str, k: int = 5, ticker: str | None = None
+) -> list[SearchResult]:
+    return store.search(query, k=k, ticker=ticker)
 
 
 def filing_metadata(ticker: str) -> dict | None:

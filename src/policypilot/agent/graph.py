@@ -8,6 +8,7 @@ of being returned to the user.
 
 from __future__ import annotations
 
+import json
 import re
 from typing import TypedDict
 
@@ -22,8 +23,12 @@ CITATION_RE = re.compile(r"\[\d+\]")
 
 PLAN_SYSTEM_PROMPT = (
     "You turn a user's question about SEC 10-K filings into a short search query "
-    "for a semantic search index over filing text. If the question names a specific "
-    "company ticker, include it in the query. Reply with ONLY the search query text, "
+    "for a semantic search index over filing text, and detect which company (if any) "
+    "the question is about. Known companies (by ticker): " + ", ".join(DEFAULT_TICKERS) + ". "
+    "The question may name a company by its ticker symbol OR by its common name (e.g. "
+    "'Apple' means AAPL) — resolve either form to the ticker symbol.\n\n"
+    "Reply with ONLY a JSON object of the form "
+    '{"search_query": "<short search query text>", "ticker": "<TICKER or null>"}, '
     "nothing else."
 )
 
@@ -57,17 +62,24 @@ class AgentState(TypedDict, total=False):
 
 def build_graph(llm: LLMClient, store: VectorStore):
     def plan_node(state: AgentState) -> AgentState:
-        query = llm.complete(
+        reply = llm.complete(
             system=PLAN_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": state["question"]}],
         ).strip()
-        words = {w.strip(".,?!").upper() for w in state["question"].split()}
-        ticker_hint = next((t for t in DEFAULT_TICKERS if t in words), None)
+        try:
+            parsed = json.loads(reply)
+            query = str(parsed.get("search_query") or "").strip()
+            ticker = parsed.get("ticker")
+            ticker = str(ticker).strip().upper() if ticker else None
+        except (json.JSONDecodeError, AttributeError):
+            query, ticker = reply, None
+        ticker_hint = ticker if ticker in DEFAULT_TICKERS else None
         return {"search_query": query or state["question"], "ticker_hint": ticker_hint}
 
     def retrieve_node(state: AgentState) -> AgentState:
-        results = retrieve(store, state["search_query"], k=5)
-        metadata = filing_metadata(state["ticker_hint"]) if state.get("ticker_hint") else None
+        ticker_hint = state.get("ticker_hint")
+        results = retrieve(store, state["search_query"], k=5, ticker=ticker_hint)
+        metadata = filing_metadata(ticker_hint) if ticker_hint else None
         return {"results": results, "metadata": metadata}
 
     def answer_node(state: AgentState) -> AgentState:
