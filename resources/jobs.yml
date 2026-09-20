@@ -20,7 +20,7 @@ resources:
             - task_key: ingest
           python_wheel_task:
             package_name: policypilot
-            entry_point: run_eval
+            entry_point: run_agent_eval
           existing_cluster_id: <REPLACE_WITH_CLUSTER_ID>
       email_notifications:
         on_failure:

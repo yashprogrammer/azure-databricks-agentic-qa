@@ -1,5 +1,10 @@
 name: CI
 
+# The eval job needs Azure OIDC (to reach Databricks Agent Evaluation's hosted judges) and a
+# GROQ_API_KEY secret (to run the agent + ingestion against the golden set). Required repo
+# environment secrets, same three cd.yml already documents plus one:
+#   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID, DATABRICKS_HOST, GROQ_API_KEY
+
 on:
   pull_request:
   push:
@@ -27,3 +32,45 @@ jobs:
 
       - name: Pytest
         run: uv run pytest
+
+  agent-eval:
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    environment: ci
+    permissions:
+      id-token: write # required for OIDC
+      contents: read
+    env:
+      PP_ENV: local
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      SEC_EDGAR_USER_AGENT: "PolicyPilot CI (ci@github-actions)"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra eval
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Ingest golden-set corpus into a fresh local Chroma store
+        run: uv run python -m policypilot.ingestion.pipeline
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+
+      - name: Run Databricks Agent Evaluation against the golden set
+        run: uv run python -m policypilot.eval.agent_eval
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}

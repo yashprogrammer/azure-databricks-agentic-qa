@@ -10,4 +10,38 @@
 {"ticker": "JPM", "question": "What regulatory risk factors does JPMorgan's 10-K disclose?"}
 {"ticker": "JPM", "question": "What does JPMorgan's 10-K say about its business segments?"}
 {"ticker": "JPM", "question": "When was JPMorgan's most recent 10-K filed?"}
+{"ticker": "GOOGL", "question": "What business segments does Alphabet describe in its 10-K?"}
+{"ticker": "GOOGL", "question": "When was Alphabet's most recent 10-K filed?"}
+{"ticker": "AMZN", "question": "What does Amazon's 10-K say about risks related to its logistics and fulfillment network?"}
+{"ticker": "AMZN", "question": "When was Amazon's most recent 10-K filed?"}
+{"ticker": "META", "question": "What does Meta's 10-K say about risk factors related to advertising revenue?"}
+{"ticker": "META", "question": "When was Meta's most recent 10-K filed?"}
+{"ticker": "NVDA", "question": "What does Nvidia's 10-K say about risk factors related to semiconductor supply and demand?"}
+{"ticker": "NVDA", "question": "When was Nvidia's most recent 10-K filed?"}
+{"ticker": "TSLA", "question": "What does Tesla's 10-K say about risk factors related to production and manufacturing?"}
+{"ticker": "TSLA", "question": "When was Tesla's most recent 10-K filed?"}
+{"ticker": "JNJ", "question": "What business segments does Johnson & Johnson describe in its 10-K?"}
+{"ticker": "JNJ", "question": "When was Johnson & Johnson's most recent 10-K filed?"}
+{"ticker": "V", "question": "What does Visa's 10-K say about risk factors related to regulation of the payments industry?"}
+{"ticker": "V", "question": "When was Visa's most recent 10-K filed?"}
+{"ticker": "WMT", "question": "What business segments does Walmart describe in its 10-K?"}
+{"ticker": "WMT", "question": "When was Walmart's most recent 10-K filed?"}
+{"ticker": "CVX", "question": "What does Chevron's 10-K say about risk factors related to commodity prices?"}
+{"ticker": "CVX", "question": "When was Chevron's most recent 10-K filed?"}
+{"ticker": "PG", "question": "What business segments does Procter & Gamble describe in its 10-K?"}
+{"ticker": "PG", "question": "When was Procter & Gamble's most recent 10-K filed?"}
+{"ticker": "HD", "question": "What does Home Depot's 10-K say about risk factors related to consumer spending?"}
+{"ticker": "HD", "question": "When was Home Depot's most recent 10-K filed?"}
+{"ticker": "BAC", "question": "What does Bank of America's 10-K say about credit risk or market risk?"}
+{"ticker": "BAC", "question": "When was Bank of America's most recent 10-K filed?"}
+{"ticker": "KO", "question": "What business segments does Coca-Cola describe in its 10-K?"}
+{"ticker": "KO", "question": "When was Coca-Cola's most recent 10-K filed?"}
+{"ticker": "PEP", "question": "What business segments does PepsiCo describe in its 10-K?"}
+{"ticker": "PEP", "question": "When was PepsiCo's most recent 10-K filed?"}
+{"ticker": "CSCO", "question": "What does Cisco's 10-K say about risk factors related to competition in networking technology?"}
+{"ticker": "CSCO", "question": "When was Cisco's most recent 10-K filed?"}
+{"ticker": "INTC", "question": "What does Intel's 10-K say about risk factors related to semiconductor manufacturing?"}
+{"ticker": "INTC", "question": "When was Intel's most recent 10-K filed?"}
+{"ticker": "DIS", "question": "What business segments does Disney describe in its 10-K?"}
+{"ticker": "DIS", "question": "When was Disney's most recent 10-K filed?"}
 {"ticker": null, "question": "What is the capital of France?"}

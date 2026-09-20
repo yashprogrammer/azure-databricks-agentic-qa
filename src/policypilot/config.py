@@ -15,9 +15,13 @@ DATA_DIR = REPO_ROOT / "data"
 RAW_DIR = DATA_DIR / "raw"
 CHROMA_DIR = DATA_DIR / "chroma"
 
-# A handful of large, well-known filers — enough real filings to build and test
-# retrieval without pulling the whole EDGAR corpus.
-DEFAULT_TICKERS = ["AAPL", "MSFT", "JPM"]
+# A diversified set of large, well-known filers across sectors — enough real filings
+# (one 10-K each) to build and test retrieval at meaningful scale without pulling the
+# whole EDGAR corpus or adding new metadata dimensions (fiscal years, filing types).
+DEFAULT_TICKERS = [
+    "AAPL", "MSFT", "JPM", "GOOGL", "AMZN", "META", "NVDA", "TSLA", "JNJ", "V",
+    "WMT", "CVX", "PG", "HD", "BAC", "KO", "PEP", "CSCO", "INTC", "DIS",
+]
 
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 GROQ_MODEL = "openai/gpt-oss-120b"
@@ -29,6 +33,10 @@ UC_SCHEMA = "filings"
 UC_CHUNKS_TABLE = f"{UC_CATALOG}.{UC_SCHEMA}.chunks"
 VECTOR_SEARCH_ENDPOINT = "policypilot-vs-endpoint"
 VECTOR_SEARCH_INDEX = f"{UC_CATALOG}.{UC_SCHEMA}.chunks_index"
+
+# Unity AI Gateway External Model endpoint wrapping Groq (see resources/serving_endpoint.yml)
+# — the deployed LLM path, wired with PII/safety guardrails Groq itself doesn't provide.
+AI_GATEWAY_ENDPOINT = "policypilot-groq-gateway"
 
 
 @dataclass(frozen=True)

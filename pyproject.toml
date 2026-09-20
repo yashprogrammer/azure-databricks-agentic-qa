@@ -7,7 +7,6 @@ requires-python = ">=3.11"
 dependencies = [
     "groq>=0.13.0",
     "langgraph>=0.2.60",
-    "mlflow>=2.18.0",
     "chromadb>=0.5.20",
     "sentence-transformers>=3.3.0",
     "streamlit>=1.40.0",
@@ -15,13 +14,15 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "beautifulsoup4>=4.12.3",
     "pydantic>=2.9.0",
-    "pandas>=2.2.0",
 ]
 
 [project.optional-dependencies]
 databricks = [
     "databricks-sdk>=0.36.0",
     "databricks-vectorsearch>=0.40",
+]
+eval = [
+    "mlflow[databricks]>=3.1",
 ]
 dev = [
     "pytest>=8.3.0",

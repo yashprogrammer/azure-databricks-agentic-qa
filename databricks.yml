@@ -9,6 +9,7 @@ bundle:
 
 include:
   - resources/apps.yml
+  - resources/serving_endpoint.yml
   # resources/jobs.yml is intentionally excluded: it still has placeholder values
   # (cluster ID, alert email) since the ingestion job isn't wired up yet — data was
   # seeded manually via notebooks/seed_chunks_table.py instead. Re-add once filled in.

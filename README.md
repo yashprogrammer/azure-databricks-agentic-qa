@@ -21,6 +21,15 @@ stays up at near-zero cost). See **[docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GU
 for the full step-by-step (including every error hit and how to avoid it) to redo this
 end to end.
 
+**Milestone 3 in progress: guardrails, broader data, CI-gated eval** (see
+[docs/UPGRADE_PLAN.md](docs/UPGRADE_PLAN.md)). Code-complete: ~20-ticker ingestion, LLM-based
+ticker/company detection in `plan_node`, a Databricks Agent Evaluation harness gated in
+`ci.yml`, and a Unity AI Gateway `resources/serving_endpoint.yml` wrapping Groq with
+PII/safety guardrails. Not yet deployed — `databricks bundle deploy`, the App's new
+serving-endpoint grant, and the two custom (off-topic/investment-advice) guardrails are
+manual one-time steps, documented in [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)
+Part 10.4–10.5.
+
 The code is structured so that swapping backends is a config change, not a rewrite (see
 [Architecture](#architecture) below).
 
@@ -29,7 +38,7 @@ The code is structured so that swapping backends is a config change, not a rewri
 | Layer | Local | Databricks/Azure |
 |---|---|---|
 | Vector store | `retrieval/local_chroma.py` (Chroma + sentence-transformers) | `retrieval/databricks_vector_search.py` — Vector Search over `policypilot_dev.filings.chunks` (implemented, endpoint/index not created yet) |
-| LLM | `agent/llm.py` `GroqLLMClient`, key from `.env` | Same `GroqLLMClient`, key injected from the `policypilot-kv-scope` secret scope as `GROQ_API_KEY` — see [Deferred](#deferred-not-mosaic-ai-yet) |
+| LLM | `agent/llm.py` `GroqLLMClient`, key from `.env` — guardrail-free by design (dev sandbox) | `DatabricksGatewayLLMClient` calling the `policypilot-groq-gateway` Unity AI Gateway External Model endpoint (`resources/serving_endpoint.yml`), which proxies to Groq with PII/safety guardrails — no raw Groq key in the App's env anymore, see [docs/UPGRADE_PLAN.md](docs/UPGRADE_PLAN.md) |
 | Structured lookup | `ingestion/manifest.py` (local JSON) | UC Function over a Delta table (not built yet) |
 | UI | `streamlit run` locally | Databricks App (`resources/apps.yml` + `app.yaml`, deploys the whole repo since the app imports the full `policypilot` package) |
 | Ingestion | `python -m policypilot.ingestion.pipeline` | `notebooks/seed_chunks_table.py` (manual, self-contained) now; `resources/jobs.yml` Lakeflow job later |
@@ -43,11 +52,12 @@ it only talks to the `VectorStore` and `LLMClient` protocols in `retrieval/base.
 
 Databricks' "Mosaic AI" branding covers Agent Framework (log an agent to Unity Catalog
 via MLflow, deploy behind Model Serving), Agent Evaluation, and Agent Bricks. This
-project doesn't use it yet — the agent runs as plain LangGraph calling Groq directly,
-even once deployed as a Databricks App. Adopting Mosaic AI Agent Framework (MLflow-log
-the agent in UC, serve it behind Model Serving, optionally swap Groq for a Foundation
-Model API or an Azure OpenAI External Model behind Unity AI Gateway) is a deliberate
-future step, not required for the agent to work end-to-end on Databricks.
+project uses Agent Evaluation (CI-gated, see below) and Unity AI Gateway (governance for
+the Groq call) but not the rest — the agent itself still runs as plain LangGraph, not
+logged to UC or served behind Model Serving. Full Foundation Model migration (swapping
+Groq for a Databricks-native model) was deliberately reversed — see
+[docs/UPGRADE_PLAN.md](docs/UPGRADE_PLAN.md) item 3 — since External Model endpoints turned
+out to support the same guardrail categories without a provider migration.
 
 The agent is deliberately not a bare RAG chain: `verify_node` is a hard citation gate —
 an answer with no `[n]` citation back to retrieved context is replaced with a refusal
@@ -65,8 +75,9 @@ cp .env.example .env
 
 ### 1. Ingest filings
 
-Pulls the latest 10-K for AAPL, MSFT, and JPM from SEC EDGAR (public, no auth), chunks
-them, embeds them locally, and stores them in `data/chroma/`.
+Pulls the latest 10-K for ~20 large-cap tickers (`DEFAULT_TICKERS` in `config.py`) from
+SEC EDGAR (public, no auth), chunks them, embeds them locally, and stores them in
+`data/chroma/`.
 
 ```bash
 uv run python -m policypilot.ingestion.pipeline
@@ -80,12 +91,15 @@ uv run streamlit run src/policypilot/app/streamlit_app.py
 
 ### 3. Run the eval harness
 
-Runs the golden question set (including one deliberately off-corpus question, to check
-the refusal gate) through the agent and scores groundedness + citation presence, logged
-to a local MLflow run (`mlflow ui` to view).
+Runs the golden question set (~47 questions across all ingested tickers, plus one
+deliberately off-corpus question to check the refusal gate) through the agent via
+Databricks Agent Evaluation (`mlflow.genai.evaluate`, `mlflow[databricks]>=3.1`). The
+hosted judges (safety, relevance, retrieval groundedness) need Databricks workspace auth;
+the citation-presence check runs locally either way.
 
 ```bash
-uv run python -m policypilot.eval.run_eval
+uv sync --extra dev --extra eval
+uv run python -m policypilot.eval.agent_eval
 ```
 
 ### Tests
@@ -127,7 +141,7 @@ src/policypilot/
 ├── ingestion/               # SEC EDGAR fetch -> chunk -> embed -> store
 ├── retrieval/                # VectorStore protocol + local/Databricks implementations
 ├── agent/                    # LLM client protocol, tools, LangGraph agent
-├── eval/                     # golden dataset + MLflow eval harness
+├── eval/                     # golden dataset + Databricks Agent Evaluation harness
 └── app/                       # Streamlit chat UI (becomes the Databricks App)
 notebooks/seed_chunks_table.py # Self-contained: fetch+chunk+embed+write into UC, run in-workspace
 scripts/setup_unity_catalog.py # UC provisioning script (dev catalog was created by hand instead)

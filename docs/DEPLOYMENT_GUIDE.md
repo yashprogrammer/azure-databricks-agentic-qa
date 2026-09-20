@@ -31,18 +31,19 @@ provision them last, test, then tear down (Part 12).
 
 ---
 
+
+
 ## Part 0 — Prerequisites
 
 - Azure subscription (any tier; a fresh "pay-as-you-go" is fine)
 - GitHub account, `gh` CLI installed and authenticated (`gh auth login`)
-- Local: Python 3.11+, [`uv`](https://docs.astral.sh/uv/)
-- A [Groq API key](https://console.groq.com) (free tier is enough) — **check
-  `client.models.list()` before hardcoding a model name.**
-  ⚠️ We hardcoded `llama-3.3-70b-versatile` and got `model_not_found` — that model wasn't
-  available on the account's key. List available models first and pick one that exists,
-  e.g. `openai/gpt-oss-120b`.
+- Local: Python 3.11+, `[uv](https://docs.astral.sh/uv/)`
+- A [Groq API key](https://console.groq.com) (free tier is enough) — **check**
+`client.models.list()` **before hardcoding a model name.**
 
 ---
+
+
 
 ## Part 1 — Local project scaffold
 
@@ -67,11 +68,13 @@ notebooks/seed_chunks_table.py
 tests/
 ```
 
+
+
 ### 1.2 `pyproject.toml`
 
 Standard `uv`-managed project. Key dependency gotcha:
 
-⚠️ **The PyPI package is `databricks-vectorsearch`, not `databricks-vector-search`.** The
+⚠️ **The PyPI package is** `databricks-vectorsearch`**, not** `databricks-vector-search`**.** The
 latter doesn't exist and will fail `uv sync` with "No solution found." The import path is
 still `from databricks.vector_search.client import VectorSearchClient` (it's a compat
 shim over the renamed `databricks-ai-search` package internally — don't worry about that,
@@ -100,10 +103,11 @@ SEC_EDGAR_USER_AGENT = "PolicyPilot research prototype you@example.com"
 ```
 
 Client hits three public, unauthenticated endpoints:
+
 - `https://www.sec.gov/files/company_tickers.json` — ticker → CIK lookup
 - `https://data.sec.gov/submissions/CIK{cik:010d}.json` — filing list, find latest `10-K`
 - `https://www.sec.gov/Archives/edgar/data/{cik}/{accession_nodash}/{doc}` — the filing
-  itself (strip HTML with BeautifulSoup)
+itself (strip HTML with BeautifulSoup)
 
 Chunk with a simple word-window splitter (~1200 words, 200 overlap) — good enough for a
 10-K.
@@ -120,11 +124,14 @@ search + optional structured lookup) → `answer` (LLM answers *only* from retri
 context) → `verify` (hard citation gate).
 
 ⚠️ **Ticker-detection bug**: don't do this —
+
 ```python
 for word in question.upper().split():   # BUG: uppercases everything first,
     if word == word.upper(): ...        # so this check always passes!
 ```
+
 Match against your known ticker list instead:
+
 ```python
 words = {w.strip(".,?!").upper() for w in question.split()}
 ticker_hint = next((t for t in KNOWN_TICKERS if t in words), None)
@@ -132,11 +139,13 @@ ticker_hint = next((t for t in KNOWN_TICKERS if t in words), None)
 
 ⚠️ **Weak citation prompting**: a vague instruction like "cite sources" gets ignored by
 smaller open models. Be explicit and give an example:
+
 ```
 This is a strict citation requirement: every sentence containing a factual claim MUST
 end with a bracketed citation number like [1] or [2] — no other citation style (no
 footnotes, no parentheses). Example: 'The filing discloses X [1].'
 ```
+
 Then gate on it in code: `re.search(r"\[\d+\]", answer)` — if it doesn't match, replace
 the answer with a refusal rather than showing an uncited response.
 
@@ -148,7 +157,7 @@ called from inside Databricks too, once auth is wired correctly).
 
 ### 1.7 Eval harness
 
-⚠️ **`mlflow.log_table(data=rows, ...)` rejects a list of dicts** — "data must be a
+⚠️ `mlflow.log_table(data=rows, ...)` **rejects a list of dicts** — "data must be a
 pandas.DataFrame or a dictionary." Wrap it: `mlflow.log_table(data=pd.DataFrame(rows), ...)`.
 
 Include at least one deliberately off-corpus question (e.g. "what's the capital of
@@ -164,9 +173,12 @@ uv run python -m policypilot.ingestion.pipeline      # real SEC filings, local C
 uv run streamlit run src/policypilot/app/streamlit_app.py --server.port 8600
 uv run python -m policypilot.eval.run_eval
 ```
+
 Don't proceed to Azure until this all works end to end locally.
 
 ---
+
+
 
 ## Part 2 — Push to GitHub
 
@@ -177,6 +189,8 @@ gh repo create <your-repo-name> --public --source=. --push
 ```
 
 ---
+
+
 
 ## Part 3 — Azure Portal: provisioning (all GUI, no CLI needed)
 
@@ -196,13 +210,14 @@ Do this *before* creating anything else — it's your safety net.
 ### 3.3 Azure Databricks workspace
 
 **Azure Databricks → + Create.**
+
 - **Pricing Tier: Premium** (required — Standard doesn't support Unity Catalog or
-  Key Vault-backed secret scopes)
+Key Vault-backed secret scopes)
 - **Workspace type: Serverless** (no VNet/storage account setup needed; matches how
-  Databricks Apps and Vector Search run anyway)
+Databricks Apps and Vector Search run anyway)
 - Leave Networking/Encryption/Security & compliance tabs at defaults (all the CMK/
-  compliance-profile toggles are enterprise add-ons, several irreversible once enabled —
-  skip them for a dev build)
+compliance-profile toggles are enterprise add-ons, several irreversible once enabled —
+skip them for a dev build)
 
 Deploy takes a few minutes. Click **"Go to resource" → "Launch Workspace."**
 
@@ -226,6 +241,8 @@ CREATE TABLE IF NOT EXISTS policypilot_dev.filings.chunks (
 USING DELTA
 TBLPROPERTIES (delta.enableChangeDataFeed = true)   -- required for Vector Search sync
 ```
+
+
 
 ### 3.6 Azure Key Vault
 
@@ -255,6 +272,7 @@ vault's Properties tab (`/subscriptions/.../resourceGroups/.../providers/Microso
 ### 3.9 Verify
 
 New notebook, run:
+
 ```python
 dbutils.secrets.listScopes()                       # should show your scope
 dbutils.secrets.list("policypilot-kv-scope")        # should show groq-api-key
@@ -262,7 +280,11 @@ dbutils.secrets.list("policypilot-kv-scope")        # should show groq-api-key
 
 ---
 
+
+
 ## Part 4 — GitHub OIDC federation (no stored Azure secrets in GitHub)
+
+
 
 ### 4.1 Entra ID app registration
 
@@ -276,6 +298,7 @@ dbutils.secrets.list("policypilot-kv-scope")        # should show groq-api-key
 **"GitHub Actions deploying Azure resources."**
 
 ⚠️ **Azure now requires immutable numeric GitHub org/repo IDs**, not just names. Get them:
+
 ```bash
 gh api users/<your-github-org-or-username> --jq .id
 gh api repos/<owner>/<repo> --jq .id
@@ -285,11 +308,14 @@ gh api repos/<owner>/<repo> --jq .id
 declares a GitHub `environment:` (which it should, see Part 5.5). GitHub's OIDC subject
 claim is `repo:org:environment:<name>` when a job specifies an environment, which
 overrides the branch-based subject. Set:
+
 - **Organization**: your GitHub org/username + its numeric ID
 - **Repository**: repo name + its numeric ID
 - **Entity type**: **Environment**
 - **GitHub environment name**: `dev` (matching what you'll create in step 4.5)
 - Leave Audience as default (`api://AzureADTokenExchange`)
+
+
 
 ### 4.3 Role assignment on the resource group
 
@@ -311,6 +337,8 @@ gh secret set AZURE_SUBSCRIPTION_ID --env dev --repo <owner>/<repo> --body "<sub
 gh secret set DATABRICKS_HOST --env dev --repo <owner>/<repo> --body "https://<workspace-url>"
 ```
 
+
+
 ### 4.5 ⚠️ CRITICAL: Azure RBAC ≠ Databricks permissions
 
 Contributor-on-the-resource-group only lets this identity manage the *Azure ARM resource*
@@ -319,11 +347,12 @@ Databricks** (create jobs, deploy apps, touch Unity Catalog). This is a separate
 system. You must **also**:
 
 1. In the Databricks workspace: profile icon → **Settings → Identity and access →
-   Service principals (Manage) → Add service principal.**
+  Service principals (Manage) → Add service principal.**
 2. Choose **"Microsoft Entra ID managed"** (not "Databricks managed") — link by the
-   **Application ID** from 4.1. Give it Workspace access + Databricks SQL access.
+  **Application ID** from 4.1. Give it Workspace access + Databricks SQL access.
 3. Grant it Unity Catalog permissions (run in SQL Editor, using its Application ID as
-   the principal):
+  the principal):
+
 ```sql
 GRANT USE CATALOG ON CATALOG policypilot_dev TO `<app-client-id>`;
 GRANT USE SCHEMA ON SCHEMA policypilot_dev.filings TO `<app-client-id>`;
@@ -332,7 +361,11 @@ GRANT SELECT, MODIFY ON TABLE policypilot_dev.filings.chunks TO `<app-client-id>
 
 ---
 
+
+
 ## Part 5 — Databricks Asset Bundle (DAB) files
+
+
 
 ### 5.1 `databricks.yml`
 
@@ -341,6 +374,7 @@ bundle:
   name: policypilot
 include:
   - resources/apps.yml
+  - resources/serving_endpoint.yml
   # jobs.yml excluded until its placeholders are filled in — see 5.4
 variables:
   catalog:
@@ -356,11 +390,12 @@ targets:
       catalog: policypilot_dev
 ```
 
+
+
 ### 5.2 `resources/apps.yml`
 
-⚠️ **`source_code_path` must point at your repo root, not just the `app/` subfolder** —
-if your Streamlit file imports the rest of your package (`from policypilot.agent.graph
-import ask`), deploying only the `app/` folder breaks that import at runtime.
+⚠️ `source_code_path` **must point at your repo root, not just the** `app/` **subfolder** —
+if your Streamlit file imports the rest of your package (`from policypilot.agent.graph import ask`), deploying only the `app/` folder breaks that import at runtime.
 
 ```yaml
 resources:
@@ -368,13 +403,48 @@ resources:
     policypilot_app:
       name: policypilot
       source_code_path: ..    # repo root, relative to resources/apps.yml
-      resources:
-        - name: groq-key
-          secret:
-            scope: policypilot-kv-scope
-            key: groq-api-key
-            permission: READ
 ```
+
+The app no longer binds the Groq key directly (that moved to the serving endpoint in 5.2b)
+— it calls `policypilot-groq-gateway` using its own auto-injected Databricks credentials.
+
+### 5.2b `resources/serving_endpoint.yml` — Unity AI Gateway wrapping Groq
+
+A Model Serving `external_model` endpoint whose `openai_api_base` points at Groq's
+OpenAI-compatible API, with built-in PII/safety guardrails turned on:
+
+```yaml
+resources:
+  model_serving_endpoints:
+    policypilot_groq_gateway:
+      name: policypilot-groq-gateway
+      config:
+        served_entities:
+          - name: groq-oss-120b
+            external_model:
+              provider: openai
+              name: openai/gpt-oss-120b
+              task: llm/v1/chat
+              openai_config:
+                openai_api_base: https://api.groq.com/openai/v1
+                openai_api_key: "{{secrets/policypilot-kv-scope/groq-api-key}}"
+      ai_gateway:
+        usage_tracking_config:
+          enabled: true
+        guardrails:
+          input:
+            safety: true
+            pii:
+              behavior: BLOCK
+          output:
+            safety: true
+            pii:
+              behavior: BLOCK
+```
+
+`{{secrets/<scope>/<key>}}` is the same Key Vault-backed secret the old `groq-key` app
+resource used — just referenced by the endpoint now instead of the app. The two custom
+guardrails (off-topic, investment-advice) aren't expressible here — see Part 10.5.
 
 ### 5.3 `app.yaml` + `requirements.txt` (repo root)
 
@@ -386,8 +456,6 @@ command: ["streamlit", "run", "src/policypilot/app/streamlit_app.py"]
 env:
   - name: "PP_ENV"
     value: "databricks"
-  - name: "GROQ_API_KEY"
-    valueFrom: "groq-key"
 ```
 
 `requirements.txt` — Databricks Apps can't read `pyproject.toml`, so mirror your
@@ -396,7 +464,7 @@ dependencies by hand here.
 ### 5.4 `resources/jobs.yml`
 
 If you haven't wired up the ingestion job yet (cluster ID, alert email still
-placeholders), **don't include it in `databricks.yml`** — a bundle deploy will try to
+placeholders), **don't include it in** `databricks.yml` — a bundle deploy will try to
 validate/create it and fail on the placeholder values. Add it back once filled in.
 
 ### 5.5 `.github/workflows/cd.yml`
@@ -430,38 +498,46 @@ jobs:
 
 ---
 
+
+
 ## Part 6 — First deploy attempt (and the secret-permission gotcha)
 
 Trigger it: **GitHub repo → Actions → CD workflow → Run workflow** (branch `main`,
 target `dev`).
 
 ⚠️ **Expect this failure the first time:**
+
 ```
 Error: cannot create resources.apps.policypilot_app: User does not have permission to
 add resource groq-key to app policypilot. User needs MANAGE permission on the resource.
 (403 PERMISSION_DENIED)
 ```
+
 This is a real, correct security guardrail — the *deploying* identity (your GitHub OIDC
 service principal) can't bind a secret it doesn't control, even though it's a valid
 secret in a scope you own. Fix it once:
 
 1. Generate a short-lived Databricks PAT (profile → Settings → Developer → Access
-   tokens → Generate new token — scope it to what's needed, e.g. "secrets"/"workspace").
+  tokens → Generate new token — scope it to what's needed, e.g. "secrets"/"workspace").
 2. Grant the deploying SP MANAGE permission on the scope (no clean GUI for this — use
-   the REST API):
+  the REST API):
+
 ```bash
 curl -X POST "https://<workspace-url>/api/2.0/secrets/acls/put" \
   -H "Authorization: Bearer <your-pat>" -H "Content-Type: application/json" \
   -d '{"scope": "policypilot-kv-scope", "principal": "<deploying-sp-app-id>", "permission": "MANAGE"}'
 ```
-3. Re-run the GitHub Actions workflow — it should now succeed all the way through
-   ("Validate bundle" → "Deploy bundle" both green).
+
+1. Re-run the GitHub Actions workflow — it should now succeed all the way through
+  ("Validate bundle" → "Deploy bundle" both green).
 
 ---
 
+
+
 ## Part 7 — Actually starting the app
 
-⚠️ **`databricks bundle deploy` only *registers* the app config — it does not start
+⚠️ `databricks bundle deploy` **only *registers* the app config — it does not start
 compute or deploy your source code.** You'll see the app exists in Databricks Apps UI but
 in a `STOPPED`/`UNAVAILABLE` state. Two more calls are needed (can run these via `curl`
 with your PAT, or click "Start"/"Deploy" in the Apps UI):
@@ -480,9 +556,12 @@ curl -X POST "https://<workspace-url>/api/2.0/apps/<app-name>/deployments" \
   -H "Authorization: Bearer <pat>" -H "Content-Type: application/json" \
   -d '{"source_code_path": "<path-from-step-2>"}'
 ```
+
 Poll `GET /api/2.0/apps/<app-name>/deployments/<deployment-id>` until `state: SUCCEEDED`.
 
 ---
+
+
 
 ## Part 8 — Vector Search endpoint + index
 
@@ -498,27 +577,34 @@ Vector Search) → on the create-index form, click **"Create an endpoint"** → 
 
 - **Primary key**: `chunk_id`
 - **Embedding source**: **"Use existing embeddings"** (you already computed them with
-  sentence-transformers locally — don't let Databricks recompute with a different model,
-  the dimensions/semantics would mismatch your local dev setup)
+sentence-transformers locally — don't let Databricks recompute with a different model,
+the dimensions/semantics would mismatch your local dev setup)
 - **Embedding vector column**: `embedding`, **dimension**: `384` (for `all-MiniLM-L6-v2`)
 - **Index update mode**: **Triggered** (not Continuous — Continuous needs always-on
-  compute and costs more; you don't need real-time sync for a demo)
+compute and costs more; you don't need real-time sync for a demo)
+
+
 
 ### 8.3 ⚠️ If it hangs on "Provisioning resources... / Waiting for initial sync..."
 
 Check the pipeline's actual error (Data Ingest section → click the Pipeline id link, or
 via API: `GET /api/2.0/pipelines/<pipeline-id>/events`). We hit this exact error on a
 fresh endpoint's very first index:
+
 ```
 Error: Response Code: 404 ... "Index policypilot_dev.filings.chunks_index does not exist"
 ```
+
 This is a backend propagation race on the endpoint's first-ever index — it'll keep
 auto-retrying and keep failing identically. **Fix: delete the index and recreate it with
 the same settings.** The second creation registers cleanly:
+
 ```bash
 curl -X DELETE ".../api/2.0/vector-search/indexes/<catalog>.<schema>.<index>" -H "Authorization: Bearer <pat>"
 # then recreate via the UI, or POST /api/2.0/vector-search/indexes with the same spec
 ```
+
+
 
 ### 8.4 Verify
 
@@ -527,6 +613,8 @@ reach `ONLINE_NO_PENDING_UPDATE`, `ready: true`, `indexed_row_count` matching yo
 row count.
 
 ---
+
+
 
 ## Part 9 — Seed real data into the table
 
@@ -538,6 +626,8 @@ Databricks notebook, run top to bottom. Expect 2-4 minutes (serverless cold-star
 model download + embedding).
 
 ---
+
+
 
 ## Part 10 — Databricks App runtime fixes (code-level)
 
@@ -561,14 +651,19 @@ client = VectorSearchClient(
 )
 ```
 
+
+
 ### 10.2 `requests.exceptions.MissingSchema: Invalid URL 'adb-xxxx.azuredatabricks.net/oidc/v1/token'`
 
 The injected `DATABRICKS_HOST` is a **bare hostname**, no `https://` prefix. Fix:
+
 ```python
 host = os.environ.get("DATABRICKS_HOST")
 if host and not host.startswith("http"):
     host = f"https://{host}"
 ```
+
+
 
 ### 10.3 `PermissionDenied: Insufficient permissions for UC entity <catalog>.<schema>.<index>`
 
@@ -583,13 +678,16 @@ GRANT USE SCHEMA ON SCHEMA policypilot_dev.filings TO `<app-own-sp-client-id>`;
 GRANT SELECT, MODIFY ON TABLE policypilot_dev.filings.chunks TO `<app-own-sp-client-id>`;
 GRANT SELECT ON TABLE policypilot_dev.filings.chunks_index TO `<app-own-sp-client-id>`;
 ```
+
 Plus, Vector Search endpoints have their own separate permission model on top of UC
 grants — grant `CAN_USE`:
+
 ```bash
 curl -X PATCH ".../api/2.0/permissions/vector-search-endpoints/<endpoint-id>" \
   -H "Authorization: Bearer <pat>" -H "Content-Type: application/json" \
   -d '{"access_control_list": [{"service_principal_name": "<app-own-sp-client-id>", "permission_level": "CAN_USE"}]}'
 ```
+
 Find the app's own SP client ID via `GET /api/2.0/apps/<app-name>` →
 `service_principal_client_id`. Find the endpoint ID via the endpoint's Overview page or
 `GET /api/2.0/vector-search/endpoints/<endpoint-name>`.
@@ -597,7 +695,64 @@ Find the app's own SP client ID via `GET /api/2.0/apps/<app-name>` →
 After fixing 10.1-10.3, redeploy (Part 7, steps 2-3 — re-upload via a fresh
 `databricks bundle deploy` if you changed code, then re-trigger the app deployment).
 
+### 10.4 Grant the App's service principal access to the AI Gateway endpoint
+
+`resources/serving_endpoint.yml` provisions `policypilot-groq-gateway` — the Unity AI
+Gateway External Model endpoint the deployed app now calls instead of Groq directly (see
+`agent/llm.py`'s `DatabricksGatewayLLMClient`). Same gotcha as 10.3's Vector Search grant:
+serving endpoints have their own permission model on top of whatever deployed the bundle —
+the App's own auto-created service principal needs an explicit grant, separate from the
+GitHub OIDC deploying SP:
+
+```bash
+curl -X PATCH "https://<workspace-url>/api/2.0/permissions/serving-endpoints/<endpoint-id>" \
+  -H "Authorization: Bearer <pat>" -H "Content-Type: application/json" \
+  -d '{"access_control_list": [{"service_principal_name": "<app-own-sp-client-id>", "permission_level": "CAN_QUERY"}]}'
+```
+
+Find the endpoint ID via the endpoint's Overview page or
+`GET /api/2.0/serving-endpoints/policypilot-groq-gateway`. The Groq key itself needs no new
+secret-scope grant — Part 6's one-time `MANAGE` grant on `policypilot-kv-scope` for the
+*deploying* SP already covers this endpoint's `openai_api_key` reference, since it's the
+same scope the old `groq-key` app resource used.
+
+### 10.5 Configure the two custom guardrails (manual — no bundle/Terraform support yet)
+
+Unity AI Gateway's built-in `pii`/`safety` guardrails are declared directly in
+`resources/serving_endpoint.yml` and deploy with the bundle. The two *custom* guardrails —
+off-topic questions and investment-advice requests — have no declarative field in the
+Databricks Terraform provider or Asset Bundles as of this writing (confirmed against the
+`databricks_model_serving` Terraform resource schema: only keyword/topic matching and PII
+behavior are exposed; custom LLM-evaluator guardrails are UI/REST-only). **A future**
+`databricks bundle deploy` **will not touch or remove these** — they live on the endpoint
+itself, outside the bundle's managed fields — but they also won't survive if the endpoint
+is ever deleted and recreated, so re-add them if that happens.
+
+Configure once, after the endpoint is deployed:
+
+1. Databricks workspace → **Serving** → `policypilot-groq-gateway` → **AI Gateway** tab →
+  **Guardrails** → **Add custom guardrail**.
+2. **Off-topic guardrail** — Execution phase: `Input`. Action: `Block`. Policy prompt:
+  > Flag this request if it is not about SEC 10-K filings, financial/regulatory
+  > disclosures, or one of the companies PolicyPilot has ingested filings for. Questions
+  > about unrelated topics (general knowledge, personal advice, other companies not in the
+  > corpus, etc.) should be flagged.
+3. **Investment-advice guardrail** — Execution phase: `Input`. Action: `Block`. Policy
+  prompt:
+  > Flag this request if it asks for personalized investment, trading, or buy/sell
+  > recommendations (e.g. "should I buy this stock", "is this a good investment"). Requests
+  > asking what a filing *discloses* about risk, financials, or business operations should
+  > NOT be flagged — only requests for advice about what action to take.
+4. Save, then re-run a quick smoke test (Part 11) with one on-topic question, one clearly
+  off-topic question, and one investment-advice question to confirm all three routes
+   behave as expected.
+
+After fixing 10.1-10.5, redeploy (Part 7, steps 2-3 — re-upload via a fresh
+`databricks bundle deploy` if you changed code, then re-trigger the app deployment).
+
 ---
+
+
 
 ## Part 11 — Test end to end
 
@@ -607,6 +762,8 @@ logged into the workspace. Ask a real question about one of your ingested compan
 confirm you get a cited, grounded answer (`[1]`, `[2]` referencing real filing text).
 
 ---
+
+
 
 ## Part 12 — Teardown (stop the meter)
 
@@ -620,9 +777,12 @@ curl -X DELETE ".../api/2.0/vector-search/endpoints/<endpoint-name>" -H "Authori
 
 **What's safe to leave running (near-zero cost):** the workspace itself, Unity Catalog
 catalog/schema/table (your seeded data stays), Key Vault + secret scope, the GitHub OIDC
-setup, the SQL warehouse (auto-stops after idle timeout). Next time you want to demo,
-you only need to redo Part 8 (recreate the endpoint + index) and Part 7 (start + deploy
-the app) — everything else is already there.
+setup, the SQL warehouse (auto-stops after idle timeout), and the
+`policypilot-groq-gateway` serving endpoint — External Model endpoints proxy each request to
+Groq with no dedicated/idle compute behind them, so they don't bill by the hour the way the
+Vector Search endpoint does. Next time you want to demo, you only need to redo Part 8
+(recreate the endpoint + index) and Part 7 (start + deploy the app) — everything else is
+already there.
 
 Also: revoke the temporary PAT you generated in Part 6 (Settings → Developer → Access
 tokens → delete it) once you're done — it was only needed for the one-time secret-ACL
@@ -630,24 +790,29 @@ grant.
 
 ---
 
+
+
 ## Appendix: every error, one line each
 
-| # | Error | Fix |
-|---|---|---|
-| 1 | SEC EDGAR 403 Forbidden | Use a real-contact User-Agent from the start |
-| 2 | Groq `model_not_found` | Call `client.models.list()` first, don't hardcode |
-| 3 | Ticker-detection always matches | Match against known tickers, not `word == word.upper()` after uppercasing the whole string |
-| 4 | Model won't produce `[1]`-style citations | Explicit strict prompt + example, code-level regex gate |
-| 5 | `mlflow.log_table` TypeError | Pass a `pandas.DataFrame`, not a list of dicts |
-| 6 | `uv sync` can't find `databricks-vector-search` | Real package name is `databricks-vectorsearch` |
-| 7 | Streamlit app `ImportError` on Databricks | `source_code_path` must be repo root, not just `app/` |
-| 8 | Bundle validate fails on job placeholders | Exclude `jobs.yml` from `include:` until filled in |
-| 9 | Azure "Contributor" role missing from list | It's under "Privileged administrator roles" tab, not "Job function roles" |
-| 10 | Federated credential subject mismatch | Entity type = "Environment" (matching `environment:` in the workflow), not "Branch" |
-| 11 | Azure RBAC doesn't grant Databricks access | Separately add the SP as a Databricks service principal + UC grants |
-| 12 | "User needs MANAGE permission on resource groq-key" | Grant the deploying SP MANAGE on the secret scope via `secrets/acls/put` |
-| 13 | App stuck `STOPPED` after bundle deploy | `bundle deploy` doesn't start/deploy apps — call `/start` then `/deployments` explicitly |
-| 14 | Vector Search index stuck provisioning | First-index race condition — delete and recreate the index |
-| 15 | `InvalidInputException` in deployed app | Pass `DATABRICKS_HOST`/`CLIENT_ID`/`CLIENT_SECRET` explicitly, auto-detection doesn't work in Apps |
-| 16 | `MissingSchema` on OIDC token URL | `DATABRICKS_HOST` env var has no `https://` — prepend it |
-| 17 | `PermissionDenied` on UC entity from the running app | The app has its OWN service principal — grant it UC + Vector Search endpoint permissions separately from the deploy SP |
+
+| #   | Error                                                | Fix                                                                                                                    |
+| --- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| 1   | SEC EDGAR 403 Forbidden                              | Use a real-contact User-Agent from the start                                                                           |
+| 2   | Groq `model_not_found`                               | Call `client.models.list()` first, don't hardcode                                                                      |
+| 3   | Ticker-detection always matches                      | Match against known tickers, not `word == word.upper()` after uppercasing the whole string                             |
+| 4   | Model won't produce `[1]`-style citations            | Explicit strict prompt + example, code-level regex gate                                                                |
+| 5   | `mlflow.log_table` TypeError                         | Pass a `pandas.DataFrame`, not a list of dicts                                                                         |
+| 6   | `uv sync` can't find `databricks-vector-search`      | Real package name is `databricks-vectorsearch`                                                                         |
+| 7   | Streamlit app `ImportError` on Databricks            | `source_code_path` must be repo root, not just `app/`                                                                  |
+| 8   | Bundle validate fails on job placeholders            | Exclude `jobs.yml` from `include:` until filled in                                                                     |
+| 9   | Azure "Contributor" role missing from list           | It's under "Privileged administrator roles" tab, not "Job function roles"                                              |
+| 10  | Federated credential subject mismatch                | Entity type = "Environment" (matching `environment:` in the workflow), not "Branch"                                    |
+| 11  | Azure RBAC doesn't grant Databricks access           | Separately add the SP as a Databricks service principal + UC grants                                                    |
+| 12  | "User needs MANAGE permission on resource groq-key"  | Grant the deploying SP MANAGE on the secret scope via `secrets/acls/put`                                               |
+| 13  | App stuck `STOPPED` after bundle deploy              | `bundle deploy` doesn't start/deploy apps — call `/start` then `/deployments` explicitly                               |
+| 14  | Vector Search index stuck provisioning               | First-index race condition — delete and recreate the index                                                             |
+| 15  | `InvalidInputException` in deployed app              | Pass `DATABRICKS_HOST`/`CLIENT_ID`/`CLIENT_SECRET` explicitly, auto-detection doesn't work in Apps                     |
+| 16  | `MissingSchema` on OIDC token URL                    | `DATABRICKS_HOST` env var has no `https://` — prepend it                                                               |
+| 17  | `PermissionDenied` on UC entity from the running app | The app has its OWN service principal — grant it UC + Vector Search endpoint permissions separately from the deploy SP |
+
+

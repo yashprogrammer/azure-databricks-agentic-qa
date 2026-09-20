@@ -21,7 +21,10 @@ from sentence_transformers import SentenceTransformer
 CATALOG = "policypilot_dev"
 SCHEMA = "filings"
 TABLE = f"{CATALOG}.{SCHEMA}.chunks"
-TICKERS = ["AAPL", "MSFT", "JPM"]
+TICKERS = [
+    "AAPL", "MSFT", "JPM", "GOOGL", "AMZN", "META", "NVDA", "TSLA", "JNJ", "V",
+    "WMT", "CVX", "PG", "HD", "BAC", "KO", "PEP", "CSCO", "INTC", "DIS",
+]
 USER_AGENT = "PolicyPilot research prototype yashstudy02@gmail.com"  # SEC requires a real contact
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 
