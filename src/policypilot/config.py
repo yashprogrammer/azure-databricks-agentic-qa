@@ -28,7 +28,7 @@ GROQ_MODEL = "openai/gpt-oss-120b"
 
 # Unity Catalog / Vector Search resource names — must match whatever's actually
 # provisioned in the workspace (see README "Next steps").
-UC_CATALOG = "policypilot_dev"
+UC_CATALOG = "topsecretcatalog"
 UC_SCHEMA = "filings"
 UC_CHUNKS_TABLE = f"{UC_CATALOG}.{UC_SCHEMA}.chunks"
 VECTOR_SEARCH_ENDPOINT = "policypilot-vs-endpoint"

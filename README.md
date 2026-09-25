@@ -41,7 +41,7 @@ The code is structured so that swapping backends is a config change, not a rewri
 | LLM | `agent/llm.py` `GroqLLMClient`, key from `.env` — guardrail-free by design (dev sandbox) | `DatabricksGatewayLLMClient` calling the `policypilot-groq-gateway` Unity AI Gateway External Model endpoint (`resources/serving_endpoint.yml`), which proxies to Groq with PII/safety guardrails — no raw Groq key in the App's env anymore, see [docs/UPGRADE_PLAN.md](docs/UPGRADE_PLAN.md) |
 | Structured lookup | `ingestion/manifest.py` (local JSON) | UC Function over a Delta table (not built yet) |
 | UI | `streamlit run` locally | Databricks App (`resources/apps.yml` + `app.yaml`, deploys the whole repo since the app imports the full `policypilot` package) |
-| Ingestion | `python -m policypilot.ingestion.pipeline` | `notebooks/seed_chunks_table.py` (manual, self-contained) now; `resources/jobs.yml` Lakeflow job later |
+| Ingestion | `python -m policypilot.ingestion.pipeline` | `notebooks/seed_chunks_table.py` (manual, self-contained) |
 
 Switch backends via `PP_ENV` (`local` or `databricks`). The agent itself
 (`agent/graph.py`, a LangGraph plan → retrieve → answer → verify loop) never changes —

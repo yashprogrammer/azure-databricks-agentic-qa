@@ -10,24 +10,22 @@ bundle:
 include:
   - resources/apps.yml
   - resources/serving_endpoint.yml
-  # resources/jobs.yml is intentionally excluded: it still has placeholder values
-  # (cluster ID, alert email) since the ingestion job isn't wired up yet — data was
-  # seeded manually via notebooks/seed_chunks_table.py instead. Re-add once filled in.
+  # No scheduled ingestion job: the UC table is seeded via notebooks/seed_chunks_table.py.
 
 variables:
   catalog:
     description: Unity Catalog catalog name for this environment
-    default: policypilot
+    default: topsecretcatalog
 
 targets:
   dev:
     mode: development
     default: true
     workspace:
-      host: https://adb-7405615537260067.7.azuredatabricks.net
+      host:  https://adb-7405614181918800.0.azuredatabricks.net
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
     variables:
-      catalog: policypilot_dev
+      catalog: topsecretcatalog
 
   staging:
     mode: production

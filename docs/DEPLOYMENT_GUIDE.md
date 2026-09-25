@@ -54,7 +54,7 @@ Build and fully test this locally before touching Azure. Nothing here costs mone
 ```
 pyproject.toml, uv.lock, .gitignore, .env.example, README.md
 databricks.yml
-resources/{jobs.yml,apps.yml}
+resources/{apps.yml,serving_endpoint.yml}
 app.yaml, requirements.txt          # Databricks App runtime config (repo root — see 5.2)
 src/policypilot/
 ├── config.py                       # env-driven settings, resource-name constants
@@ -305,7 +305,7 @@ gh api repos/<owner>/<repo> --jq .id
 ```
 
 ⚠️ **Entity type must be "Environment", not "Branch"** — *if* your deploy workflow
-declares a GitHub `environment:` (which it should, see Part 5.5). GitHub's OIDC subject
+declares a GitHub `environment:` (which it should, see Part 5.4). GitHub's OIDC subject
 claim is `repo:org:environment:<name>` when a job specifies an environment, which
 overrides the branch-based subject. Set:
 
@@ -367,6 +367,42 @@ GRANT SELECT, MODIFY ON TABLE policypilot_dev.filings.chunks TO `<app-client-id>
 
 
 
+### 5.0 What to replace for your own setup
+
+If you cloned this repo instead of building it from scratch, a few values point at *our*
+workspace and names. Grep for `<REPLACE_WITH_` to find the obvious placeholders — but most
+of those you should **leave alone** (see the last table). Here's the full picture:
+
+**Must change** — these are specific to one person/workspace:
+
+| Value | Where | Replace with |
+| --- | --- | --- |
+| `dev` target `host:` | `databricks.yml` → `targets.dev.workspace.host` | Your workspace URL from 3.3 (`https://adb-<id>.<n>.azuredatabricks.net`) |
+| SEC contact email | `.env` → `SEC_EDGAR_USER_AGENT` | Your real email — SEC returns 403 without one (error #1) |
+| SEC contact email | `notebooks/seed_chunks_table.py` → `USER_AGENT` | Same — the notebook doesn't read `.env` |
+
+**Change only if you picked different names** in Part 3 / Part 8 than this guide uses:
+
+| Name used in this guide | Where it's referenced |
+| --- | --- |
+| Catalog `policypilot_dev`, schema `filings` | `src/policypilot/config.py` (`UC_CATALOG`, `UC_SCHEMA`), `databricks.yml` (`targets.dev.variables.catalog`), `notebooks/seed_chunks_table.py` (`CATALOG`, `SCHEMA`), the `GRANT` SQL in 4.5 / 10.3 |
+| Vector Search endpoint `policypilot-vs-endpoint` | `src/policypilot/config.py` (`VECTOR_SEARCH_ENDPOINT`) |
+| Secret scope `policypilot-kv-scope`, secret `groq-api-key` | `resources/serving_endpoint.yml` (`openai_api_key: "{{secrets/<scope>/<key>}}"`) |
+| Gateway endpoint `policypilot-groq-gateway` | `resources/serving_endpoint.yml` (`name:`) **and** `src/policypilot/config.py` (`AI_GATEWAY_ENDPOINT`) — keep the two in sync |
+
+The Key Vault name, resource group, and Entra app registration name live only in the Azure
+Portal and GitHub secrets (Parts 3–4) — nothing in the repo references them.
+
+**Leave as-is** — these `<REPLACE_WITH_...>` placeholders are intentionally unfilled and
+don't block a `dev` deploy:
+
+| Placeholder | Where | Why it's safe to ignore |
+| --- | --- | --- |
+| `<REPLACE_WITH_STAGING_WORKSPACE_URL>`, `<REPLACE_WITH_STAGING_RUN_AS_SP>` | `databricks.yml` → `targets.staging` | The CLI only resolves the target you pass (`-t dev`), so other targets are never read |
+| `<REPLACE_WITH_PROD_WORKSPACE_URL>`, `<REPLACE_WITH_PROD_RUN_AS_SP>` | `databricks.yml` → `targets.prod` | Same — reserved for future separate staging/prod workspaces |
+
+
+
 ### 5.1 `databricks.yml`
 
 ```yaml
@@ -375,7 +411,6 @@ bundle:
 include:
   - resources/apps.yml
   - resources/serving_endpoint.yml
-  # jobs.yml excluded until its placeholders are filled in — see 5.4
 variables:
   catalog:
     default: policypilot
@@ -461,13 +496,7 @@ env:
 `requirements.txt` — Databricks Apps can't read `pyproject.toml`, so mirror your
 dependencies by hand here.
 
-### 5.4 `resources/jobs.yml`
-
-If you haven't wired up the ingestion job yet (cluster ID, alert email still
-placeholders), **don't include it in** `databricks.yml` — a bundle deploy will try to
-validate/create it and fail on the placeholder values. Add it back once filled in.
-
-### 5.5 `.github/workflows/cd.yml`
+### 5.4 `.github/workflows/cd.yml`
 
 ```yaml
 on:
@@ -618,7 +647,7 @@ row count.
 
 ## Part 9 — Seed real data into the table
 
-If your ingestion job isn't wired up yet, run a self-contained notebook instead
+Load the table with a self-contained notebook
 (`notebooks/seed_chunks_table.py` in this repo) — it fetches from SEC EDGAR, chunks,
 embeds with the same local model, and writes into the UC table with plain PySpark, no
 dependency on your package being importable in the workspace. Paste it into a new
@@ -804,15 +833,14 @@ grant.
 | 5   | `mlflow.log_table` TypeError                         | Pass a `pandas.DataFrame`, not a list of dicts                                                                         |
 | 6   | `uv sync` can't find `databricks-vector-search`      | Real package name is `databricks-vectorsearch`                                                                         |
 | 7   | Streamlit app `ImportError` on Databricks            | `source_code_path` must be repo root, not just `app/`                                                                  |
-| 8   | Bundle validate fails on job placeholders            | Exclude `jobs.yml` from `include:` until filled in                                                                     |
-| 9   | Azure "Contributor" role missing from list           | It's under "Privileged administrator roles" tab, not "Job function roles"                                              |
-| 10  | Federated credential subject mismatch                | Entity type = "Environment" (matching `environment:` in the workflow), not "Branch"                                    |
-| 11  | Azure RBAC doesn't grant Databricks access           | Separately add the SP as a Databricks service principal + UC grants                                                    |
-| 12  | "User needs MANAGE permission on resource groq-key"  | Grant the deploying SP MANAGE on the secret scope via `secrets/acls/put`                                               |
-| 13  | App stuck `STOPPED` after bundle deploy              | `bundle deploy` doesn't start/deploy apps — call `/start` then `/deployments` explicitly                               |
-| 14  | Vector Search index stuck provisioning               | First-index race condition — delete and recreate the index                                                             |
-| 15  | `InvalidInputException` in deployed app              | Pass `DATABRICKS_HOST`/`CLIENT_ID`/`CLIENT_SECRET` explicitly, auto-detection doesn't work in Apps                     |
-| 16  | `MissingSchema` on OIDC token URL                    | `DATABRICKS_HOST` env var has no `https://` — prepend it                                                               |
-| 17  | `PermissionDenied` on UC entity from the running app | The app has its OWN service principal — grant it UC + Vector Search endpoint permissions separately from the deploy SP |
+| 8   | Azure "Contributor" role missing from list           | It's under "Privileged administrator roles" tab, not "Job function roles"                                              |
+| 9   | Federated credential subject mismatch                | Entity type = "Environment" (matching `environment:` in the workflow), not "Branch"                                    |
+| 10  | Azure RBAC doesn't grant Databricks access           | Separately add the SP as a Databricks service principal + UC grants                                                    |
+| 11  | "User needs MANAGE permission on resource groq-key"  | Grant the deploying SP MANAGE on the secret scope via `secrets/acls/put`                                               |
+| 12  | App stuck `STOPPED` after bundle deploy              | `bundle deploy` doesn't start/deploy apps — call `/start` then `/deployments` explicitly                               |
+| 13  | Vector Search index stuck provisioning               | First-index race condition — delete and recreate the index                                                             |
+| 14  | `InvalidInputException` in deployed app              | Pass `DATABRICKS_HOST`/`CLIENT_ID`/`CLIENT_SECRET` explicitly, auto-detection doesn't work in Apps                     |
+| 15  | `MissingSchema` on OIDC token URL                    | `DATABRICKS_HOST` env var has no `https://` — prepend it                                                               |
+| 16  | `PermissionDenied` on UC entity from the running app | The app has its OWN service principal — grant it UC + Vector Search endpoint permissions separately from the deploy SP |
 
 

@@ -19,7 +19,7 @@ resources:
               task: llm/v1/chat
               openai_config:
                 openai_api_base: https://api.groq.com/openai/v1
-                openai_api_key: "{{secrets/policypilot-kv-scope/groq-api-key}}"
+                openai_api_key: "{{secrets/topsecretScopee/groq-api-key}}"
       ai_gateway:
         usage_tracking_config:
           enabled: true

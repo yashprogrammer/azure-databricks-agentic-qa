@@ -1,6 +1,5 @@
-"""fetch -> chunk -> embed -> store, as one function. Callable locally today (see
-__main__ below) and, unchanged, as the Lakeflow job task once resources/jobs.yml is
-deployed against a real workspace.
+"""fetch -> chunk -> embed -> store, as one function. Run locally via __main__ below
+(`python -m policypilot.ingestion.pipeline`); CI's agent-eval job calls it the same way.
 """
 
 from __future__ import annotations
