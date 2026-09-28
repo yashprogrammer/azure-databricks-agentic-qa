@@ -477,7 +477,9 @@ resources:
             native_api_types: [openai/v1/chat/completions]
         custom:
           direct:
-            base_url: https://api.groq.com/openai/v1
+            # CUSTOM posts to this URL verbatim (no path appended), so it must be the full
+            # chat-completions endpoint, not the /openai/v1 base.
+            base_url: https://api.groq.com/openai/v1/chat/completions
             api_key:
               plaintext: ${var.groq_api_key}
   model_services:
@@ -904,5 +906,6 @@ grant.
 | 17  | `Please provide a valid value for the name field in external_model` | Groq model IDs contain `/`, which serving-endpoint external models reject — use a Unity Gateway provider service + model service in the bundle instead (5.2b) |
 | 18  | `Destination model provider service '<catalog>.filings.groq' does not exist` on first deploy | Creation-order race (both created in parallel) — re-run the deploy; the provider was created on the first run |
 | 19  | Deploy succeeds but Unity Gateway Providers/Models look empty | CD's service principal owns them and you have no grant — `grants:` in `resources/ai_gateway.yml` gives `var.admin_user` MANAGE (10.4) |
+| 20  | Playground: `404 Unknown request URL: POST /openai/v1` from Groq | `provider_type: CUSTOM` posts to `base_url` verbatim — set it to the full `https://api.groq.com/openai/v1/chat/completions` |
 
 

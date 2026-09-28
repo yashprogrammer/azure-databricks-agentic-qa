@@ -29,7 +29,9 @@ resources:
             native_api_types: [openai/v1/chat/completions]
         custom:
           direct:
-            base_url: https://api.groq.com/openai/v1
+            # CUSTOM posts to this URL verbatim (no path appended), so it must be the full
+            # chat-completions endpoint, not the /openai/v1 base.
+            base_url: https://api.groq.com/openai/v1/chat/completions
             api_key:
               plaintext: ${var.groq_api_key}
       grants:
