@@ -9,13 +9,17 @@ bundle:
 
 include:
   - resources/apps.yml
-  - resources/serving_endpoint.yml
+  - resources/ai_gateway.yml
   # No scheduled ingestion job: the UC table is seeded via notebooks/seed_chunks_table.py.
 
 variables:
   catalog:
     description: Unity Catalog catalog name for this environment
     default: topsecretcatalog
+  groq_api_key:
+    description: >-
+      Groq API key for the Unity Gateway model provider service (resources/ai_gateway.yml).
+      No default on purpose — CD sets BUNDLE_VAR_groq_api_key from Azure Key Vault; never commit it.
 
 targets:
   dev:

@@ -1,7 +1,7 @@
 # Databricks App runtime config. Deployed alongside the full repo (see resources/apps.yml)
 # so `streamlit run` finds src/policypilot/app/streamlit_app.py at this same relative path.
-# No GROQ_API_KEY here — deployed mode calls the policypilot-groq-gateway serving endpoint
-# (Unity AI Gateway) via the App's own auto-injected DATABRICKS_* credentials instead of a
+# No GROQ_API_KEY here — deployed mode calls the Unity Gateway model service
+# (resources/ai_gateway.yml) via the App's own auto-injected DATABRICKS_* credentials instead of a
 # raw provider key (see agent/llm.py's DatabricksGatewayLLMClient).
 command: ["streamlit", "run", "src/policypilot/app/streamlit_app.py"]
 env:

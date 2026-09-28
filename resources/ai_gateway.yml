@@ -1,0 +1,47 @@
+# Unity Gateway in front of Groq, as two Unity Catalog objects (DABs Beta resources):
+#
+#   model_provider_services.groq  -> holds Groq's base URL + API key, allowlists upstream models
+#   model_services.gpt_oss        -> what the App calls: <catalog>.filings.gpt-oss
+#
+# Why not a model_serving_endpoints external_model: its `name` field rejects "/" (400
+# INVALID_PARAMETER_VALUE), and every usable Groq model ID has one (openai/gpt-oss-120b).
+# Provider-service targets accept provider-native IDs. See docs/DEPLOYMENT_GUIDE.md 5.2b.
+#
+# The Groq key is injected at deploy time as BUNDLE_VAR_groq_api_key — cd.yml reads it from
+# Azure Key Vault after the OIDC login — so it never lands in source control. Guardrails
+# (service policies) are attached in the Unity Gateway UI; the App's service principal needs
+# EXECUTE on the model service (DEPLOYMENT_GUIDE 10.4).
+
+resources:
+  model_provider_services:
+    groq:
+      parent: schemas/${var.catalog}.filings
+      model_provider_service_id: groq
+      comment: Groq's OpenAI-compatible API (key injected from Azure Key Vault at deploy time)
+      config:
+        provider_type: EXTERNAL_MODEL_PROVIDER_TYPE_CUSTOM
+        targets:
+          - model: openai/gpt-oss-120b
+            native_api_types: [openai/v1/chat/completions]
+        custom:
+          direct:
+            base_url: https://api.groq.com/openai/v1
+            api_key:
+              plaintext: ${var.groq_api_key}
+
+  model_services:
+    gpt_oss:
+      parent: schemas/${var.catalog}.filings
+      model_service_id: gpt-oss
+      comment: PolicyPilot's governed LLM — routes to Groq gpt-oss-120b via the groq provider service
+      config:
+        routing:
+          destinations:
+            - name: primary
+              destination_type: DESTINATION_TYPE_EXTERNAL_FOUNDATION_MODEL
+              external_model_config:
+                model_provider_service: model-provider-services/${var.catalog}.filings.groq
+                target:
+                  model: openai/gpt-oss-120b
+                  native_api_types: [openai/v1/chat/completions]
+              traffic_percentage: 100

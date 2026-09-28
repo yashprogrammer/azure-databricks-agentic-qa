@@ -1,7 +1,7 @@
 """LLM client. Groq is the model provider everywhere, but the deployed path no longer talks
-to Groq directly: it goes through the policypilot-groq-gateway Unity AI Gateway endpoint
-(resources/serving_endpoint.yml), which holds the Groq key itself and adds PII/safety
-guardrails Groq doesn't provide. Local dev still calls Groq directly with a raw
+to Groq directly: it goes through a Unity Gateway model service (resources/ai_gateway.yml),
+whose model provider service holds the Groq key, and which adds guardrails/rate limits Groq
+doesn't provide. Local dev still calls Groq directly with a raw
 `GROQ_API_KEY` from `.env` — guardrail-free by design (see docs/UPGRADE_PLAN.md), since local
 is a developer sandbox never exposed to untrusted users.
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from policypilot.config import AI_GATEWAY_ENDPOINT, GROQ_MODEL, get_settings
+from policypilot.config import AI_GATEWAY_MODEL_SERVICE, GROQ_MODEL, get_settings
 
 
 class LLMClient(Protocol):
@@ -34,28 +34,30 @@ class GroqLLMClient:
 
 
 class DatabricksGatewayLLMClient:
-    """Calls Groq via the Unity AI Gateway External Model endpoint instead of Groq directly.
-    Auth is the Databricks App's own auto-injected service principal credentials
-    (DATABRICKS_HOST/CLIENT_ID/CLIENT_SECRET), picked up automatically by WorkspaceClient's
-    unified auth — the same credentials DatabricksVectorSearchStore already relies on, so
-    there's no new credential to wire up."""
+    """Calls Groq via the Unity Gateway model service instead of Groq directly, through the
+    OpenAI-compatible unified API (POST /ai-gateway/mlflow/v1/chat/completions, with the
+    model service's three-part UC name as `model`). Auth is the Databricks App's own
+    auto-injected service principal credentials (DATABRICKS_HOST/CLIENT_ID/CLIENT_SECRET),
+    picked up by WorkspaceClient's unified auth — the same credentials
+    DatabricksVectorSearchStore already relies on, so there's no new credential to wire up."""
 
-    def __init__(self, endpoint_name: str = AI_GATEWAY_ENDPOINT):
+    def __init__(self, model_service: str = AI_GATEWAY_MODEL_SERVICE):
         from databricks.sdk import WorkspaceClient
 
         self._client = WorkspaceClient()
-        self._endpoint_name = endpoint_name
+        self._model_service = model_service
 
     def complete(self, system: str, messages: list[dict]) -> str:
-        from databricks.sdk.service.serving import ChatMessage, ChatMessageRole
-
-        chat_messages = [ChatMessage(role=ChatMessageRole.SYSTEM, content=system)] + [
-            ChatMessage(role=ChatMessageRole(m["role"]), content=m["content"]) for m in messages
-        ]
-        response = self._client.serving_endpoints.query(
-            name=self._endpoint_name, messages=chat_messages, max_tokens=1024
+        response = self._client.api_client.do(
+            "POST",
+            "/ai-gateway/mlflow/v1/chat/completions",
+            body={
+                "model": self._model_service,
+                "max_tokens": 1024,
+                "messages": [{"role": "system", "content": system}, *messages],
+            },
         )
-        return response.choices[0].message.content or ""
+        return response["choices"][0]["message"]["content"] or ""
 
 
 def get_llm_client() -> LLMClient:

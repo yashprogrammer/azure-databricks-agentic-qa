@@ -34,9 +34,10 @@ UC_CHUNKS_TABLE = f"{UC_CATALOG}.{UC_SCHEMA}.chunks"
 VECTOR_SEARCH_ENDPOINT = "policypilot-vs-endpoint"
 VECTOR_SEARCH_INDEX = f"{UC_CATALOG}.{UC_SCHEMA}.chunks_index"
 
-# Unity AI Gateway External Model endpoint wrapping Groq (see resources/serving_endpoint.yml)
-# — the deployed LLM path, wired with PII/safety guardrails Groq itself doesn't provide.
-AI_GATEWAY_ENDPOINT = "policypilot-groq-gateway"
+# Unity Gateway model service routing to Groq (resources/ai_gateway.yml) — the deployed LLM
+# path, with guardrails/rate limits Groq itself doesn't provide. A UC object, so it's
+# addressed by its three-part name.
+AI_GATEWAY_MODEL_SERVICE = f"{UC_CATALOG}.{UC_SCHEMA}.gpt-oss"
 
 
 @dataclass(frozen=True)

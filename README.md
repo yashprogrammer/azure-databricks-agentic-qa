@@ -24,10 +24,9 @@ end to end.
 **Milestone 3 in progress: guardrails, broader data, CI-gated eval** (see
 [docs/UPGRADE_PLAN.md](docs/UPGRADE_PLAN.md)). Code-complete: ~20-ticker ingestion, LLM-based
 ticker/company detection in `plan_node`, a Databricks Agent Evaluation harness gated in
-`ci.yml`, and a Unity AI Gateway `resources/serving_endpoint.yml` wrapping Groq with
-PII/safety guardrails. Not yet deployed — `databricks bundle deploy`, the App's new
-serving-endpoint grant, and the two custom (off-topic/investment-advice) guardrails are
-manual one-time steps, documented in [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)
+`ci.yml`, and Unity Gateway in front of Groq (`resources/ai_gateway.yml`: a model provider
+service + model service, deployed by the bundle). The App's `EXECUTE` grant on the model
+service and the guardrails are manual one-time steps, documented in [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)
 Part 10.4–10.5.
 
 The code is structured so that swapping backends is a config change, not a rewrite (see
@@ -38,7 +37,7 @@ The code is structured so that swapping backends is a config change, not a rewri
 | Layer | Local | Databricks/Azure |
 |---|---|---|
 | Vector store | `retrieval/local_chroma.py` (Chroma + sentence-transformers) | `retrieval/databricks_vector_search.py` — Vector Search over `policypilot_dev.filings.chunks` (implemented, endpoint/index not created yet) |
-| LLM | `agent/llm.py` `GroqLLMClient`, key from `.env` — guardrail-free by design (dev sandbox) | `DatabricksGatewayLLMClient` calling the `policypilot-groq-gateway` Unity AI Gateway External Model endpoint (`resources/serving_endpoint.yml`), which proxies to Groq with PII/safety guardrails — no raw Groq key in the App's env anymore, see [docs/UPGRADE_PLAN.md](docs/UPGRADE_PLAN.md) |
+| LLM | `agent/llm.py` `GroqLLMClient`, key from `.env` — guardrail-free by design (dev sandbox) | `DatabricksGatewayLLMClient` calling the `<catalog>.filings.gpt-oss` Unity Gateway model service (`resources/ai_gateway.yml`), which routes to Groq through a provider service holding the key, with guardrails — no raw Groq key in the App's env anymore, see [docs/UPGRADE_PLAN.md](docs/UPGRADE_PLAN.md) |
 | Structured lookup | `ingestion/manifest.py` (local JSON) | UC Function over a Delta table (not built yet) |
 | UI | `streamlit run` locally | Databricks App (`resources/apps.yml` + `app.yaml`, deploys the whole repo since the app imports the full `policypilot` package) |
 | Ingestion | `python -m policypilot.ingestion.pipeline` | `notebooks/seed_chunks_table.py` (manual, self-contained) |
@@ -56,8 +55,8 @@ project uses Agent Evaluation (CI-gated, see below) and Unity AI Gateway (govern
 the Groq call) but not the rest — the agent itself still runs as plain LangGraph, not
 logged to UC or served behind Model Serving. Full Foundation Model migration (swapping
 Groq for a Databricks-native model) was deliberately reversed — see
-[docs/UPGRADE_PLAN.md](docs/UPGRADE_PLAN.md) item 3 — since External Model endpoints turned
-out to support the same guardrail categories without a provider migration.
+[docs/UPGRADE_PLAN.md](docs/UPGRADE_PLAN.md) item 3 — since a Unity Gateway model service in
+front of Groq provides the same guardrails without a provider migration.
 
 The agent is deliberately not a bare RAG chain: `verify_node` is a hard citation gate —
 an answer with no `[n]` citation back to retrieved context is replaced with a refusal

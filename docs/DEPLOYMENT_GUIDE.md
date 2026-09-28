@@ -54,7 +54,7 @@ Build and fully test this locally before touching Azure. Nothing here costs mone
 ```
 pyproject.toml, uv.lock, .gitignore, .env.example, README.md
 databricks.yml
-resources/{apps.yml,serving_endpoint.yml}
+resources/{apps.yml,ai_gateway.yml}
 app.yaml, requirements.txt          # Databricks App runtime config (repo root — see 5.2)
 src/policypilot/
 ├── config.py                       # env-driven settings, resource-name constants
@@ -335,7 +335,13 @@ gh secret set AZURE_CLIENT_ID --env dev --repo <owner>/<repo> --body "<client-id
 gh secret set AZURE_TENANT_ID --env dev --repo <owner>/<repo> --body "<tenant-id>"
 gh secret set AZURE_SUBSCRIPTION_ID --env dev --repo <owner>/<repo> --body "<sub-id>"
 gh secret set DATABRICKS_HOST --env dev --repo <owner>/<repo> --body "https://<workspace-url>"
+gh secret set KEY_VAULT_NAME --env dev --repo <owner>/<repo> --body "<your-vault-name>"
 ```
+
+`KEY_VAULT_NAME` lets CD read the Groq key from Key Vault at deploy time (5.2b). For that,
+the app registration also needs read access to the vault's secrets: **Key vault → Access
+policies → + Create → Secret permissions: Get → Principal: your app registration from
+4.1 → Create.**
 
 
 
@@ -357,7 +363,11 @@ system. You must **also**:
 GRANT USE CATALOG ON CATALOG policypilot_dev TO `<app-client-id>`;
 GRANT USE SCHEMA ON SCHEMA policypilot_dev.filings TO `<app-client-id>`;
 GRANT SELECT, MODIFY ON TABLE policypilot_dev.filings.chunks TO `<app-client-id>`;
+GRANT CREATE SERVICE ON SCHEMA policypilot_dev.filings TO `<app-client-id>`;
 ```
+
+`CREATE SERVICE` lets `bundle deploy` create the Unity Gateway provider and model services
+(5.2b) in that schema. The deploying SP becomes their owner.
 
 ---
 
@@ -387,8 +397,8 @@ of those you should **leave alone** (see the last table). Here's the full pictur
 | --- | --- |
 | Catalog `policypilot_dev`, schema `filings` | `src/policypilot/config.py` (`UC_CATALOG`, `UC_SCHEMA`), `databricks.yml` (`targets.dev.variables.catalog`), `notebooks/seed_chunks_table.py` (`CATALOG`, `SCHEMA`), the `GRANT` SQL in 4.5 / 10.3 |
 | Vector Search endpoint `policypilot-vs-endpoint` | `src/policypilot/config.py` (`VECTOR_SEARCH_ENDPOINT`) |
-| Secret scope `policypilot-kv-scope`, secret `groq-api-key` | `resources/serving_endpoint.yml` (`openai_api_key: "{{secrets/<scope>/<key>}}"`) |
-| Gateway endpoint `policypilot-groq-gateway` | `resources/serving_endpoint.yml` (`name:`) **and** `src/policypilot/config.py` (`AI_GATEWAY_ENDPOINT`) — keep the two in sync |
+| Key Vault secret `groq-api-key` | `.github/workflows/cd.yml` ("Read Groq API key from Key Vault" step); vault name comes from the `KEY_VAULT_NAME` GitHub secret |
+| Model service `gpt-oss` in schema `filings` | `resources/ai_gateway.yml` (`model_service_id`, `parent`) **and** `src/policypilot/config.py` (`AI_GATEWAY_MODEL_SERVICE`) — keep the two in sync |
 
 The Key Vault name, resource group, and Entra app registration name live only in the Azure
 Portal and GitHub secrets (Parts 3–4) — nothing in the repo references them.
@@ -410,7 +420,7 @@ bundle:
   name: policypilot
 include:
   - resources/apps.yml
-  - resources/serving_endpoint.yml
+  - resources/ai_gateway.yml
 variables:
   catalog:
     default: policypilot
@@ -440,46 +450,75 @@ resources:
       source_code_path: ..    # repo root, relative to resources/apps.yml
 ```
 
-The app no longer binds the Groq key directly (that moved to the serving endpoint in 5.2b)
-— it calls `policypilot-groq-gateway` using its own auto-injected Databricks credentials.
+The app no longer binds the Groq key directly — it calls a Unity Gateway model service
+(5.2b) using its own auto-injected Databricks credentials.
 
-### 5.2b `resources/serving_endpoint.yml` — Unity AI Gateway wrapping Groq
+### 5.2b `resources/ai_gateway.yml` — Unity Gateway wrapping Groq
 
-A Model Serving `external_model` endpoint whose `openai_api_base` points at Groq's
-OpenAI-compatible API, with built-in PII/safety guardrails turned on:
+The deployed app reaches Groq through **Unity Gateway**, so the call gets guardrails, rate
+limits, and usage tracking, and the Groq key never appears in the app. The file declares
+two Unity Catalog objects (bundle resources, currently **Beta**):
+
+- **`model_provider_services.groq`**: Groq's OpenAI-compatible base URL plus the API key,
+  and an allowlist of upstream models.
+- **`model_services.gpt_oss`**: what the app calls (`<catalog>.filings.gpt-oss`). It routes
+  to the provider service with `DESTINATION_TYPE_EXTERNAL_FOUNDATION_MODEL`.
 
 ```yaml
 resources:
-  model_serving_endpoints:
-    policypilot_groq_gateway:
-      name: policypilot-groq-gateway
+  model_provider_services:
+    groq:
+      parent: schemas/${var.catalog}.filings
+      model_provider_service_id: groq
       config:
-        served_entities:
-          - name: groq-oss-120b
-            external_model:
-              provider: openai
-              name: openai/gpt-oss-120b
-              task: llm/v1/chat
-              openai_config:
-                openai_api_base: https://api.groq.com/openai/v1
-                openai_api_key: "{{secrets/policypilot-kv-scope/groq-api-key}}"
-      ai_gateway:
-        usage_tracking_config:
-          enabled: true
-        guardrails:
-          input:
-            safety: true
-            pii:
-              behavior: BLOCK
-          output:
-            safety: true
-            pii:
-              behavior: BLOCK
+        provider_type: EXTERNAL_MODEL_PROVIDER_TYPE_CUSTOM
+        targets:
+          - model: openai/gpt-oss-120b
+            native_api_types: [openai/v1/chat/completions]
+        custom:
+          direct:
+            base_url: https://api.groq.com/openai/v1
+            api_key:
+              plaintext: ${var.groq_api_key}
+  model_services:
+    gpt_oss:
+      parent: schemas/${var.catalog}.filings
+      model_service_id: gpt-oss
+      config:
+        routing:
+          destinations:
+            - name: primary
+              destination_type: DESTINATION_TYPE_EXTERNAL_FOUNDATION_MODEL
+              external_model_config:
+                model_provider_service: model-provider-services/${var.catalog}.filings.groq
+                target:
+                  model: openai/gpt-oss-120b
+                  native_api_types: [openai/v1/chat/completions]
+              traffic_percentage: 100
 ```
 
-`{{secrets/<scope>/<key>}}` is the same Key Vault-backed secret the old `groq-key` app
-resource used — just referenced by the endpoint now instead of the app. The two custom
-guardrails (off-topic, investment-advice) aren't expressible here — see Part 10.5.
+⚠️ **Why not a `model_serving_endpoints` external model?** That was our first attempt:
+`provider: openai` with `openai_api_base: https://api.groq.com/openai/v1`. Deploy fails with
+`Please provide a valid value for the name field in external_model ... (400
+INVALID_PARAMETER_VALUE)`, and the Serving UI rejects it the same way. `external_model.name`
+only allows letters, digits, `-`, `_`, `.` and `:`, and it's sent upstream as `"model"`.
+Every usable Groq model ID contains a slash (`openai/gpt-oss-120b`), and Groq has no
+slash-free alias for it. `provider: custom` has the same rule. Provider-service `targets`
+accept provider-native IDs, slashes included.
+
+**The key:** bundle provider services take the key as a plaintext variable, not a
+`{{secrets/...}}` reference. `groq_api_key` is declared in `databricks.yml` with no default.
+`cd.yml` reads it from Key Vault after the OIDC login and passes it as
+`BUNDLE_VAR_groq_api_key`, masked in the logs. Key Vault stays the single source of truth,
+and the key is never stored in GitHub or git.
+
+⚠️ Model services and provider services share one namespace per schema. If you created
+`groq` or `gpt-oss` there by hand in the UI, delete them first, or deploy fails with a name
+conflict.
+
+The app calls the model service through the OpenAI-compatible unified API:
+`POST https://<workspace-url>/ai-gateway/mlflow/v1/chat/completions` with
+`"model": "<catalog>.filings.gpt-oss"` (see `DatabricksGatewayLLMClient` in `agent/llm.py`).
 
 ### 5.3 `app.yaml` + `requirements.txt` (repo root)
 
@@ -518,6 +557,12 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Read Groq API key from Key Vault     # feeds ${var.groq_api_key} (5.2b)
+        run: |
+          key=$(az keyvault secret show --vault-name "${{ secrets.KEY_VAULT_NAME }}" \
+            --name groq-api-key --query value -o tsv)
+          echo "::add-mask::$key"
+          echo "BUNDLE_VAR_groq_api_key=$key" >> "$GITHUB_ENV"
       - uses: databricks/setup-cli@main
       - run: databricks bundle validate -t ${{ inputs.target }}
         env: { DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }} }
@@ -541,6 +586,11 @@ Error: cannot create resources.apps.policypilot_app: User does not have permissi
 add resource groq-key to app policypilot. User needs MANAGE permission on the resource.
 (403 PERMISSION_DENIED)
 ```
+
+(This only happens while `apps.yml` binds the Groq secret to the app as a resource, which
+is how the first deploy worked. The current setup routes the key through Unity Gateway
+instead (5.2b), so the app binds no secret and you won't hit this. It's kept here because
+it's a common first-deploy error.)
 
 This is a real, correct security guardrail — the *deploying* identity (your GitHub OIDC
 service principal) can't bind a secret it doesn't control, even though it's a valid
@@ -724,57 +774,49 @@ Find the app's own SP client ID via `GET /api/2.0/apps/<app-name>` →
 After fixing 10.1-10.3, redeploy (Part 7, steps 2-3 — re-upload via a fresh
 `databricks bundle deploy` if you changed code, then re-trigger the app deployment).
 
-### 10.4 Grant the App's service principal access to the AI Gateway endpoint
+### 10.4 Grant the App's service principal `EXECUTE` on the model service
 
-`resources/serving_endpoint.yml` provisions `policypilot-groq-gateway` — the Unity AI
-Gateway External Model endpoint the deployed app now calls instead of Groq directly (see
-`agent/llm.py`'s `DatabricksGatewayLLMClient`). Same gotcha as 10.3's Vector Search grant:
-serving endpoints have their own permission model on top of whatever deployed the bundle —
-the App's own auto-created service principal needs an explicit grant, separate from the
-GitHub OIDC deploying SP:
+The model service from 5.2b is a Unity Catalog securable. The App's own service principal
+needs **`EXECUTE`** on it, plus the `USE CATALOG` / `USE SCHEMA` it already got in 10.3.
+Grant it in **Catalog Explorer → your catalog → `filings` → `gpt-oss` → Permissions →
+Grant → `EXECUTE`**, selecting `<app-own-sp-client-id>`. Or use the API:
 
 ```bash
-curl -X PATCH "https://<workspace-url>/api/2.0/permissions/serving-endpoints/<endpoint-id>" \
+curl -X PATCH "https://<workspace-url>/api/2.1/unity-catalog/permissions/model_service/<catalog>.filings.gpt-oss" \
   -H "Authorization: Bearer <pat>" -H "Content-Type: application/json" \
-  -d '{"access_control_list": [{"service_principal_name": "<app-own-sp-client-id>", "permission_level": "CAN_QUERY"}]}'
+  -d '{"changes": [{"principal": "<app-own-sp-client-id>", "add": ["EXECUTE"]}]}'
 ```
 
-Find the endpoint ID via the endpoint's Overview page or
-`GET /api/2.0/serving-endpoints/policypilot-groq-gateway`. The Groq key itself needs no new
-secret-scope grant — Part 6's one-time `MANAGE` grant on `policypilot-kv-scope` for the
-*deploying* SP already covers this endpoint's `openai_api_key` reference, since it's the
-same scope the old `groq-key` app resource used.
+The app **doesn't** need access to the `groq` provider service or the key. Model services
+use *definer's* privileges: Databricks checks that the model service's **owner** (the
+deploying SP) can reach the provider service, not the caller. Without this grant, the
+app's LLM calls fail with a permission error even though Vector Search retrieval works.
 
-### 10.5 Configure the two custom guardrails (manual — no bundle/Terraform support yet)
+### 10.5 Configure guardrails on the model service (UI)
 
-Unity AI Gateway's built-in `pii`/`safety` guardrails are declared directly in
-`resources/serving_endpoint.yml` and deploy with the bundle. The two *custom* guardrails —
-off-topic questions and investment-advice requests — have no declarative field in the
-Databricks Terraform provider or Asset Bundles as of this writing (confirmed against the
-`databricks_model_serving` Terraform resource schema: only keyword/topic matching and PII
-behavior are exposed; custom LLM-evaluator guardrails are UI/REST-only). **A future**
-`databricks bundle deploy` **will not touch or remove these** — they live on the endpoint
-itself, outside the bundle's managed fields — but they also won't survive if the endpoint
-is ever deleted and recreated, so re-add them if that happens.
+Guardrails go on the **model service** (`gpt-oss`), not the provider service. When a model
+service routes to a provider service, only the model service's Unity Gateway features
+apply; anything set on the provider service is skipped. They're attached as **service
+policies**, which are Beta and set in the UI: **Unity Gateway → Models → `gpt-oss`**. If you
+don't see that option, enable the **Unity Gateway** beta features on the account console's
+**Previews** page. Then add:
 
-Configure once, after the endpoint is deployed:
-
-1. Databricks workspace → **Serving** → `policypilot-groq-gateway` → **AI Gateway** tab →
-  **Guardrails** → **Add custom guardrail**.
-2. **Off-topic guardrail** — Execution phase: `Input`. Action: `Block`. Policy prompt:
+1. Built-in **safety** and **PII** guardrails (block), on input and output.
+2. **Off-topic guardrail**. Phase: `Input`. Action: `Block`. Policy prompt:
   > Flag this request if it is not about SEC 10-K filings, financial/regulatory
   > disclosures, or one of the companies PolicyPilot has ingested filings for. Questions
   > about unrelated topics (general knowledge, personal advice, other companies not in the
   > corpus, etc.) should be flagged.
-3. **Investment-advice guardrail** — Execution phase: `Input`. Action: `Block`. Policy
-  prompt:
+3. **Investment-advice guardrail**. Phase: `Input`. Action: `Block`. Policy prompt:
   > Flag this request if it asks for personalized investment, trading, or buy/sell
   > recommendations (e.g. "should I buy this stock", "is this a good investment"). Requests
   > asking what a filing *discloses* about risk, financials, or business operations should
   > NOT be flagged — only requests for advice about what action to take.
-4. Save, then re-run a quick smoke test (Part 11) with one on-topic question, one clearly
-  off-topic question, and one investment-advice question to confirm all three routes
-   behave as expected.
+4. Save, then smoke-test (Part 11) with one on-topic question, one clearly off-topic
+  question, and one investment-advice question to confirm all three behave as expected.
+
+A later `bundle deploy` updates the model service's routing config but doesn't manage its
+policies, so they stay. If the model service is ever deleted and recreated, re-attach them.
 
 After fixing 10.1-10.5, redeploy (Part 7, steps 2-3 — re-upload via a fresh
 `databricks bundle deploy` if you changed code, then re-trigger the app deployment).
@@ -806,10 +848,10 @@ curl -X DELETE ".../api/2.0/vector-search/endpoints/<endpoint-name>" -H "Authori
 
 **What's safe to leave running (near-zero cost):** the workspace itself, Unity Catalog
 catalog/schema/table (your seeded data stays), Key Vault + secret scope, the GitHub OIDC
-setup, the SQL warehouse (auto-stops after idle timeout), and the
-`policypilot-groq-gateway` serving endpoint — External Model endpoints proxy each request to
-Groq with no dedicated/idle compute behind them, so they don't bill by the hour the way the
-Vector Search endpoint does. Next time you want to demo, you only need to redo Part 8
+setup, the SQL warehouse (auto-stops after idle timeout), and the Unity Gateway `groq`
+provider service + `gpt-oss` model service. They proxy each request to Groq with no
+dedicated or idle compute behind them, so they don't bill by the hour the way the Vector
+Search endpoint does. Next time you want to demo, you only need to redo Part 8
 (recreate the endpoint + index) and Part 7 (start + deploy the app) — everything else is
 already there.
 
@@ -842,5 +884,6 @@ grant.
 | 14  | `InvalidInputException` in deployed app              | Pass `DATABRICKS_HOST`/`CLIENT_ID`/`CLIENT_SECRET` explicitly, auto-detection doesn't work in Apps                     |
 | 15  | `MissingSchema` on OIDC token URL                    | `DATABRICKS_HOST` env var has no `https://` — prepend it                                                               |
 | 16  | `PermissionDenied` on UC entity from the running app | The app has its OWN service principal — grant it UC + Vector Search endpoint permissions separately from the deploy SP |
+| 17  | `Please provide a valid value for the name field in external_model` | Groq model IDs contain `/`, which serving-endpoint external models reject — use a Unity Gateway provider service + model service in the bundle instead (5.2b) |
 
 

@@ -1,10 +1,10 @@
 # Databricks App resource: deploys the WHOLE repo (not just app/), because
 # streamlit_app.py imports the full `policypilot` package (agent, retrieval, ingestion).
 # app.yaml (repo root) has the run command + env vars; requirements.txt (repo root) has
-# the pip dependencies. The App no longer binds the Groq key directly — it calls the
-# policypilot-groq-gateway serving endpoint (resources/serving_endpoint.yml) instead, which
-# holds the Key Vault-backed secret itself. The App's own service principal needs CAN_QUERY
-# on that endpoint — see docs/DEPLOYMENT_GUIDE.md.
+# the pip dependencies. The App no longer binds the Groq key directly — it calls the Unity
+# Gateway model service in resources/ai_gateway.yml, whose provider service holds the key.
+# The App's own service principal needs EXECUTE on that model service — see
+# docs/DEPLOYMENT_GUIDE.md 10.4.
 
 resources:
   apps:
