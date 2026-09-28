@@ -512,6 +512,14 @@ accept provider-native IDs, slashes included.
 `BUNDLE_VAR_groq_api_key`, masked in the logs. Key Vault stays the single source of truth,
 and the key is never stored in GitHub or git.
 
+⚠️ **Expect the very first deploy to fail once:** `cannot create
+resources.model_services.gpt_oss: Destination model provider service
+'<catalog>.filings.groq' does not exist (400 INVALID_PARAMETER_VALUE)`, right after
+`Created model_provider_services.groq`. The model service points at the provider by a plain
+string, so the bundle can't see the dependency and creates both at the same time. **Re-run
+the job.** The provider exists now, so the model service gets created. Later deploys don't
+hit this.
+
 ⚠️ Model services and provider services share one namespace per schema. If you created
 `groq` or `gpt-oss` there by hand in the UI, delete them first, or deploy fails with a name
 conflict.
@@ -774,23 +782,32 @@ Find the app's own SP client ID via `GET /api/2.0/apps/<app-name>` →
 After fixing 10.1-10.3, redeploy (Part 7, steps 2-3 — re-upload via a fresh
 `databricks bundle deploy` if you changed code, then re-trigger the app deployment).
 
-### 10.4 Grant the App's service principal `EXECUTE` on the model service
+### 10.4 Grants on the model service (automatic, via the bundle)
 
-The model service from 5.2b is a Unity Catalog securable. The App's own service principal
-needs **`EXECUTE`** on it, plus the `USE CATALOG` / `USE SCHEMA` it already got in 10.3.
-Grant it in **Catalog Explorer → your catalog → `filings` → `gpt-oss` → Permissions →
-Grant → `EXECUTE`**, selecting `<app-own-sp-client-id>`. Or use the API:
+⚠️ **After the first deploy, the provider and model services are invisible in the UI.**
+Unity Gateway → Providers/Models is empty, and so is Catalog Explorer → `filings`. They
+exist. CD deployed as the GitHub OIDC service principal, so that principal **owns** them,
+and in Unity Catalog you can't see an object you hold no privilege on. Model services can't
+be discovered with `BROWSE` alone.
 
-```bash
-curl -X PATCH "https://<workspace-url>/api/2.1/unity-catalog/permissions/model_service/<catalog>.filings.gpt-oss" \
-  -H "Authorization: Bearer <pat>" -H "Content-Type: application/json" \
-  -d '{"changes": [{"principal": "<app-own-sp-client-id>", "add": ["EXECUTE"]}]}'
+`resources/ai_gateway.yml` handles this with `grants:` blocks, re-applied on every deploy:
+
+```yaml
+      grants:
+        - principal: ${var.admin_user}          # you: see + configure (e.g. guardrails)
+          privileges: [MANAGE, EXECUTE]
+        - principal: ${resources.apps.policypilot_app.service_principal_client_id}
+          privileges: [EXECUTE]                 # the App's own SP (model service only)
 ```
+
+Set `admin_user` to your Databricks username (email) under `targets.dev.variables` in
+`databricks.yml`. The second grant points at the App's own auto-created service principal
+by reference, so there's no ID to copy, and it follows the app if it's ever recreated.
 
 The app **doesn't** need access to the `groq` provider service or the key. Model services
 use *definer's* privileges: Databricks checks that the model service's **owner** (the
-deploying SP) can reach the provider service, not the caller. Without this grant, the
-app's LLM calls fail with a permission error even though Vector Search retrieval works.
+deploying SP) can reach the provider service, not the caller. Without the `EXECUTE` grant,
+the app's LLM calls fail with a permission error even though Vector Search retrieval works.
 
 ### 10.5 Configure guardrails on the model service (UI)
 
@@ -885,5 +902,7 @@ grant.
 | 15  | `MissingSchema` on OIDC token URL                    | `DATABRICKS_HOST` env var has no `https://` — prepend it                                                               |
 | 16  | `PermissionDenied` on UC entity from the running app | The app has its OWN service principal — grant it UC + Vector Search endpoint permissions separately from the deploy SP |
 | 17  | `Please provide a valid value for the name field in external_model` | Groq model IDs contain `/`, which serving-endpoint external models reject — use a Unity Gateway provider service + model service in the bundle instead (5.2b) |
+| 18  | `Destination model provider service '<catalog>.filings.groq' does not exist` on first deploy | Creation-order race (both created in parallel) — re-run the deploy; the provider was created on the first run |
+| 19  | Deploy succeeds but Unity Gateway Providers/Models look empty | CD's service principal owns them and you have no grant — `grants:` in `resources/ai_gateway.yml` gives `var.admin_user` MANAGE (10.4) |
 
 

@@ -9,8 +9,12 @@
 #
 # The Groq key is injected at deploy time as BUNDLE_VAR_groq_api_key — cd.yml reads it from
 # Azure Key Vault after the OIDC login — so it never lands in source control. Guardrails
-# (service policies) are attached in the Unity Gateway UI; the App's service principal needs
-# EXECUTE on the model service (DEPLOYMENT_GUIDE 10.4).
+# (service policies) are attached in the Unity Gateway UI.
+#
+# Grants: CD deploys as the GitHub OIDC service principal, so it OWNS both objects — and in
+# Unity Catalog you can't even see an object you hold no privilege on. So each deploy grants
+# the human admin (var.admin_user) MANAGE, and the App's own service principal EXECUTE on the
+# model service (definer's privileges: it needs nothing on the provider service).
 
 resources:
   model_provider_services:
@@ -28,6 +32,9 @@ resources:
             base_url: https://api.groq.com/openai/v1
             api_key:
               plaintext: ${var.groq_api_key}
+      grants:
+        - principal: ${var.admin_user}
+          privileges: [MANAGE, EXECUTE]
 
   model_services:
     gpt_oss:
@@ -45,3 +52,8 @@ resources:
                   model: openai/gpt-oss-120b
                   native_api_types: [openai/v1/chat/completions]
               traffic_percentage: 100
+      grants:
+        - principal: ${var.admin_user}
+          privileges: [MANAGE, EXECUTE]
+        - principal: ${resources.apps.policypilot_app.service_principal_client_id}
+          privileges: [EXECUTE]

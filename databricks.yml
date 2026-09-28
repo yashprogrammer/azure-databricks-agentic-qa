@@ -20,6 +20,10 @@ variables:
     description: >-
       Groq API key for the Unity Gateway model provider service (resources/ai_gateway.yml).
       No default on purpose — CD sets BUNDLE_VAR_groq_api_key from Azure Key Vault; never commit it.
+  admin_user:
+    description: >-
+      Your Databricks username (email). Gets MANAGE on the Unity Gateway provider/model services
+      that CD's service principal owns — otherwise they're invisible to you in the UI.
 
 targets:
   dev:
@@ -30,6 +34,7 @@ targets:
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
     variables:
       catalog: topsecretcatalog
+      admin_user: yashstudy02@gmail.com
 
   staging:
     mode: production
