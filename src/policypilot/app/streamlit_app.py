@@ -28,7 +28,9 @@ st.caption(
 @st.cache_resource
 def _load_backend():
     settings = get_settings()
-    if not settings.groq_api_key:
+    # Only local mode needs a raw Groq key; deployed mode reaches Groq through the Unity
+    # Gateway model service using the App's own credentials, so no key exists there.
+    if settings.is_local and not settings.groq_api_key:
         return None, None, settings
     return get_llm_client(), get_vector_store(), settings
 

@@ -32,18 +32,20 @@ provision them last, test, then tear down (Part 13).
 **Parts are in the order you do them.** Parts 1–7 cost nothing at rest. Part 9 (Vector
 Search) is where billing starts, so do 9 → 13 in one sitting:
 
-| Part | What | Cost |
-| --- | --- | --- |
-| 0–2 | Prereqs, local build, push to GitHub | free |
-| 3–4 | Azure provisioning, GitHub OIDC | ~free at rest |
-| 5–6 | Bundle files, first CD deploy, gateway Playground test | ~free (gateway bills per token) |
-| 7 | Guardrails on the model service | free |
-| 8 | Seed the `chunks` table | a few minutes of serverless |
-| 9 | Vector Search endpoint + index | **bills hourly from here** |
-| 10 | Grants for the app's own service principal | free |
-| 11 | Start + deploy the app | **bills hourly** |
-| 12 | Test end to end | — |
-| 13 | Teardown | stops the meter |
+
+| Part | What                                                   | Cost                            |
+| ---- | ------------------------------------------------------ | ------------------------------- |
+| 0–2  | Prereqs, local build, push to GitHub                   | free                            |
+| 3–4  | Azure provisioning, GitHub OIDC                        | ~free at rest                   |
+| 5–6  | Bundle files, first CD deploy, gateway Playground test | ~free (gateway bills per token) |
+| 7    | Guardrails on the model service                        | free                            |
+| 8    | Seed the `chunks` table                                | a few minutes of serverless     |
+| 9    | Vector Search endpoint + index                         | **bills hourly from here**      |
+| 10   | Grants for the app's own service principal             | free                            |
+| 11   | Start + deploy the app                                 | **bills hourly**                |
+| 12   | Test end to end                                        | —                               |
+| 13   | Teardown                                               | stops the meter                 |
+
 
 ---
 
@@ -171,8 +173,10 @@ Two implementations of one `LLMClient` protocol, picked by `PP_ENV`:
 
 - **local:** `GroqLLMClient` calls Groq directly with `GROQ_API_KEY` from `.env`.
 - **databricks:** `DatabricksGatewayLLMClient` calls the Unity Gateway model service (5.2b)
-  with the app's own credentials. It's still Groq underneath, but with guardrails, usage
-  tracking, and no key inside the app.
+with the app's own credentials. It's still Groq underneath, but with guardrails, usage
+tracking, and no key inside the app.
+
+
 
 ### 1.7 Eval harness
 
@@ -365,8 +369,6 @@ the app registration also needs read access to the vault's secrets: **Key vault 
 policies → + Create → Secret permissions: Get → Principal: your app registration from
 4.1 → Create.**
 
-
-
 ### 4.5 ⚠️ CRITICAL: Azure RBAC ≠ Databricks permissions
 
 Contributor-on-the-resource-group only lets this identity manage the *Azure ARM resource*
@@ -407,20 +409,24 @@ of those you should **leave alone** (see the last table). Here's the full pictur
 
 **Must change** — these are specific to one person/workspace:
 
-| Value | Where | Replace with |
-| --- | --- | --- |
+
+| Value                | Where                                           | Replace with                                                             |
+| -------------------- | ----------------------------------------------- | ------------------------------------------------------------------------ |
 | `dev` target `host:` | `databricks.yml` → `targets.dev.workspace.host` | Your workspace URL from 3.3 (`https://adb-<id>.<n>.azuredatabricks.net`) |
-| SEC contact email | `.env` → `SEC_EDGAR_USER_AGENT` | Your real email — SEC returns 403 without one (error #1) |
-| SEC contact email | `notebooks/seed_chunks_table.py` → `USER_AGENT` | Same — the notebook doesn't read `.env` |
+| SEC contact email    | `.env` → `SEC_EDGAR_USER_AGENT`                 | Your real email — SEC returns 403 without one (error #1)                 |
+| SEC contact email    | `notebooks/seed_chunks_table.py` → `USER_AGENT` | Same — the notebook doesn't read `.env`                                  |
+
 
 **Change only if you picked different names** in Part 3 / Part 9 than this guide uses:
 
-| Name used in this guide | Where it's referenced |
-| --- | --- |
-| Catalog `policypilot_dev`, schema `filings` | `src/policypilot/config.py` (`UC_CATALOG`, `UC_SCHEMA`), `databricks.yml` (`targets.dev.variables.catalog`), `notebooks/seed_chunks_table.py` (`CATALOG`, `SCHEMA`), the `GRANT` SQL in 4.5 / Part 10 |
-| Vector Search endpoint `policypilot-vs-endpoint` | `src/policypilot/config.py` (`VECTOR_SEARCH_ENDPOINT`) |
-| Key Vault secret `groq-api-key` | `.github/workflows/cd.yml` ("Read Groq API key from Key Vault" step); vault name comes from the `KEY_VAULT_NAME` GitHub secret |
-| Model service `gpt-oss` in schema `filings` | `resources/ai_gateway.yml` (`model_service_id`, `parent`) **and** `src/policypilot/config.py` (`AI_GATEWAY_MODEL_SERVICE`) — keep the two in sync |
+
+| Name used in this guide                          | Where it's referenced                                                                                                                                                                                 |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Catalog `policypilot_dev`, schema `filings`      | `src/policypilot/config.py` (`UC_CATALOG`, `UC_SCHEMA`), `databricks.yml` (`targets.dev.variables.catalog`), `notebooks/seed_chunks_table.py` (`CATALOG`, `SCHEMA`), the `GRANT` SQL in 4.5 / Part 10 |
+| Vector Search endpoint `policypilot-vs-endpoint` | `src/policypilot/config.py` (`VECTOR_SEARCH_ENDPOINT`)                                                                                                                                                |
+| Key Vault secret `groq-api-key`                  | `.github/workflows/cd.yml` ("Read Groq API key from Key Vault" step); vault name comes from the `KEY_VAULT_NAME` GitHub secret                                                                        |
+| Model service `gpt-oss` in schema `filings`      | `resources/ai_gateway.yml` (`model_service_id`, `parent`) **and** `src/policypilot/config.py` (`AI_GATEWAY_MODEL_SERVICE`) — keep the two in sync                                                     |
+
 
 The Key Vault name, resource group, and Entra app registration name live only in the Azure
 Portal and GitHub secrets (Parts 3–4) — nothing in the repo references them.
@@ -428,10 +434,12 @@ Portal and GitHub secrets (Parts 3–4) — nothing in the repo references them.
 **Leave as-is** — these `<REPLACE_WITH_...>` placeholders are intentionally unfilled and
 don't block a `dev` deploy:
 
-| Placeholder | Where | Why it's safe to ignore |
-| --- | --- | --- |
+
+| Placeholder                                                                | Where                                | Why it's safe to ignore                                                               |
+| -------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------- |
 | `<REPLACE_WITH_STAGING_WORKSPACE_URL>`, `<REPLACE_WITH_STAGING_RUN_AS_SP>` | `databricks.yml` → `targets.staging` | The CLI only resolves the target you pass (`-t dev`), so other targets are never read |
-| `<REPLACE_WITH_PROD_WORKSPACE_URL>`, `<REPLACE_WITH_PROD_RUN_AS_SP>` | `databricks.yml` → `targets.prod` | Same — reserved for future separate staging/prod workspaces |
+| `<REPLACE_WITH_PROD_WORKSPACE_URL>`, `<REPLACE_WITH_PROD_RUN_AS_SP>`       | `databricks.yml` → `targets.prod`    | Same — reserved for future separate staging/prod workspaces                           |
+
 
 
 
@@ -481,10 +489,10 @@ The deployed app reaches Groq through **Unity Gateway**, so the call gets guardr
 limits, and usage tracking, and the Groq key never appears in the app. The file declares
 two Unity Catalog objects (bundle resources, currently **Beta**):
 
-- **`model_provider_services.groq`**: Groq's OpenAI-compatible base URL plus the API key,
-  and an allowlist of upstream models.
-- **`model_services.gpt_oss`**: what the app calls (`<catalog>.filings.gpt-oss`). It routes
-  to the provider service with `DESTINATION_TYPE_EXTERNAL_FOUNDATION_MODEL`.
+- `model_provider_services.groq`: Groq's OpenAI-compatible base URL plus the API key,
+and an allowlist of upstream models.
+- `model_services.gpt_oss`: what the app calls (`<catalog>.filings.gpt-oss`). It routes
+to the provider service with `DESTINATION_TYPE_EXTERNAL_FOUNDATION_MODEL`.
 
 ```yaml
 resources:
@@ -521,10 +529,9 @@ resources:
               traffic_percentage: 100
 ```
 
-⚠️ **Why not a `model_serving_endpoints` external model?** That was our first attempt:
+⚠️ **Why not a** `model_serving_endpoints` **external model?** That was our first attempt:
 `provider: openai` with `openai_api_base: https://api.groq.com/openai/v1`. Deploy fails with
-`Please provide a valid value for the name field in external_model ... (400
-INVALID_PARAMETER_VALUE)`, and the Serving UI rejects it the same way. `external_model.name`
+`Please provide a valid value for the name field in external_model ... (400 INVALID_PARAMETER_VALUE)`, and the Serving UI rejects it the same way. `external_model.name`
 only allows letters, digits, `-`, `_`, `.` and `:`, and it's sent upstream as `"model"`.
 Every usable Groq model ID contains a slash (`openai/gpt-oss-120b`), and Groq has no
 slash-free alias for it. `provider: custom` has the same rule. Provider-service `targets`
@@ -536,9 +543,7 @@ accept provider-native IDs, slashes included.
 `BUNDLE_VAR_groq_api_key`, masked in the logs. Key Vault stays the single source of truth,
 and the key is never stored in GitHub or git.
 
-⚠️ **Expect the very first deploy to fail once:** `cannot create
-resources.model_services.gpt_oss: Destination model provider service
-'<catalog>.filings.groq' does not exist (400 INVALID_PARAMETER_VALUE)`, right after
+⚠️ **Expect the very first deploy to fail once:** `cannot create resources.model_services.gpt_oss: Destination model provider service '<catalog>.filings.groq' does not exist (400 INVALID_PARAMETER_VALUE)`, right after
 `Created model_provider_services.groq`. The model service points at the provider by a plain
 string, so the bundle can't see the dependency and creates both at the same time. **Re-run
 the job.** The provider exists now, so the model service gets created. Later deploys don't
@@ -601,6 +606,8 @@ jobs:
       - run: databricks bundle deploy -t ${{ inputs.target }}
         env: { DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }} }
 ```
+
+
 
 ### 5.5 Databricks-only code fixes (already in the repo)
 
@@ -684,9 +691,8 @@ the app's LLM calls fail with a permission error even though Vector Search retri
 ### 6.3 Smoke-test the gateway in the Playground
 
 Before touching the app, prove the Databricks → Groq path on its own: **Playground →
-select `<catalog>.filings.gpt-oss` → send any prompt.** A normal reply means the key,
-the provider URL, the routing and your grants all work. If Groq returns `404 Unknown
-request URL: POST /openai/v1`, `base_url` is missing `/chat/completions` (error #20).
+select** `<catalog>.filings.gpt-oss` **→ send any prompt.** A normal reply means the key,
+the provider URL, the routing and your grants all work. If Groq returns `404 Unknown request URL: POST /openai/v1`, `base_url` is missing `/chat/completions` (error #20).
 
 ### 6.4 Older gotcha: secret MANAGE permission
 
@@ -713,18 +719,18 @@ curl -X POST "https://<workspace-url>/api/2.0/secrets/acls/put" \
   -d '{"scope": "policypilot-kv-scope", "principal": "<deploying-sp-app-id>", "permission": "MANAGE"}'
 ```
 
-3. Re-run the workflow.
+1. Re-run the workflow.
 
 ---
 
 
 
-## Part 7 — Guardrails on the model service (UI)
+## Part 7 — Guardrails on the model service (OPTIONAL) (UI)
 
 Guardrails go on the **model service** (`gpt-oss`), not the provider service. When a model
 service routes to a provider service, only the model service's Unity Gateway features
 apply; anything set on the provider service is skipped. They're attached as **service
-policies**, which are Beta and set in the UI: **Unity Gateway → Models → `gpt-oss`**. If you
+policies**, which are Beta and set in the UI: **Unity Gateway → Models →** `gpt-oss`. If you
 don't see that option, enable the **Unity Gateway** beta features on the account console's
 **Previews** page. Then add:
 
@@ -753,8 +759,7 @@ This step is optional for a first run; the app works without it.
 
 ## Part 8 — Seed real data into the table
 
-Load the table with a self-contained notebook
-(`notebooks/seed_chunks_table.py` in this repo) — it fetches from SEC EDGAR, chunks,
+ Load the table with a self-contained notebook (`notebooks/seed_chunks_table.py` in this repo) — it fetches from SEC EDGAR, chunks,
 embeds with the same local model, and writes into the UC table with plain PySpark, no
 dependency on your package being importable in the workspace. Paste it into a new
 Databricks notebook, run top to bottom. Expect 2-4 minutes (serverless cold-start +
@@ -829,8 +834,11 @@ row count.
 
 ## Part 10 — Grants for the app's own service principal
 
-Skip this and the app fails with `PermissionDenied: Insufficient permissions for UC entity
-<catalog>.<schema>.<index>`.
+**The app already exists.** CD registered it in Part 6, and that also created its service
+principal. It's just not running yet (Part 11 starts it). Grant it access now, so the app
+works on first start instead of failing with a permission error.
+
+Skip this and the app fails with `PermissionDenied: Insufficient permissions for UC entity <catalog>.<schema>.<index>`.
 
 ⚠️ **The deployed app runs under its own, separate, auto-created service principal**
 (shown in the Databricks Apps UI, e.g. `app-xxxxx <app-name>`) — **different from the
@@ -840,7 +848,7 @@ grants:
 ```sql
 GRANT USE CATALOG ON CATALOG policypilot_dev TO `<app-own-sp-client-id>`;
 GRANT USE SCHEMA ON SCHEMA policypilot_dev.filings TO `<app-own-sp-client-id>`;
-GRANT SELECT, MODIFY ON TABLE policypilot_dev.filings.chunks TO `<app-own-sp-client-id>`;
+GRANT SELECT ON TABLE policypilot_dev.filings.chunks TO `<app-own-sp-client-id>`;   -- read-only is enough
 GRANT SELECT ON TABLE policypilot_dev.filings.chunks_index TO `<app-own-sp-client-id>`;
 ```
 
@@ -853,8 +861,11 @@ curl -X PATCH ".../api/2.0/permissions/vector-search-endpoints/<endpoint-id>" \
   -d '{"access_control_list": [{"service_principal_name": "<app-own-sp-client-id>", "permission_level": "CAN_USE"}]}'
 ```
 
-Find the app's own SP client ID via `GET /api/2.0/apps/<app-name>` →
-`service_principal_client_id`. Find the endpoint ID via the endpoint's Overview page or
+Or in the UI: **Compute → Vector Search → your endpoint → Permissions → add the app's
+service principal → Can Use.**
+
+Find the app's own SP client ID in **Compute → Apps → your app** (shown as `app-xxxx
+<app-name>`), or via `GET /api/2.0/apps/<app-name>` → `service_principal_client_id`. Find the endpoint ID via the endpoint's Overview page or
 `GET /api/2.0/vector-search/endpoints/<endpoint-name>`.
 
 `USE CATALOG` / `USE SCHEMA` also cover the gateway model service. The app's `EXECUTE` on
@@ -936,27 +947,27 @@ Access tokens → delete it) once you're done.
 ## Appendix: every error, one line each
 
 
-| #   | Error                                                | Fix                                                                                                                    |
-| --- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| 1   | SEC EDGAR 403 Forbidden                              | Use a real-contact User-Agent from the start                                                                           |
-| 2   | Groq `model_not_found`                               | Call `client.models.list()` first, don't hardcode                                                                      |
-| 3   | Ticker-detection always matches                      | Match against known tickers, not `word == word.upper()` after uppercasing the whole string                             |
-| 4   | Model won't produce `[1]`-style citations            | Explicit strict prompt + example, code-level regex gate                                                                |
-| 5   | `mlflow.log_table` TypeError                         | Pass a `pandas.DataFrame`, not a list of dicts                                                                         |
-| 6   | `uv sync` can't find `databricks-vector-search`      | Real package name is `databricks-vectorsearch`                                                                         |
-| 7   | Streamlit app `ImportError` on Databricks            | `source_code_path` must be repo root, not just `app/`                                                                  |
-| 8   | Azure "Contributor" role missing from list           | It's under "Privileged administrator roles" tab, not "Job function roles"                                              |
-| 9   | Federated credential subject mismatch                | Entity type = "Environment" (matching `environment:` in the workflow), not "Branch"                                    |
-| 10  | Azure RBAC doesn't grant Databricks access           | Separately add the SP as a Databricks service principal + UC grants                                                    |
-| 11  | "User needs MANAGE permission on resource groq-key"  | Grant the deploying SP MANAGE on the secret scope via `secrets/acls/put`                                               |
-| 12  | App stuck `STOPPED` after bundle deploy              | `bundle deploy` doesn't start/deploy apps — call `/start` then `/deployments` explicitly                               |
-| 13  | Vector Search index stuck provisioning               | First-index race condition — delete and recreate the index                                                             |
-| 14  | `InvalidInputException` in deployed app              | Pass `DATABRICKS_HOST`/`CLIENT_ID`/`CLIENT_SECRET` explicitly, auto-detection doesn't work in Apps                     |
-| 15  | `MissingSchema` on OIDC token URL                    | `DATABRICKS_HOST` env var has no `https://` — prepend it                                                               |
-| 16  | `PermissionDenied` on UC entity from the running app | The app has its OWN service principal — grant it UC + Vector Search endpoint permissions separately from the deploy SP |
-| 17  | `Please provide a valid value for the name field in external_model` | Groq model IDs contain `/`, which serving-endpoint external models reject — use a Unity Gateway provider service + model service in the bundle instead (5.2b) |
-| 18  | `Destination model provider service '<catalog>.filings.groq' does not exist` on first deploy | Creation-order race (both created in parallel) — re-run the deploy; the provider was created on the first run |
-| 19  | Deploy succeeds but Unity Gateway Providers/Models look empty | CD's service principal owns them and you have no grant — `grants:` in `resources/ai_gateway.yml` gives `var.admin_user` MANAGE (6.2) |
-| 20  | Playground: `404 Unknown request URL: POST /openai/v1` from Groq | `provider_type: CUSTOM` posts to `base_url` verbatim — set it to the full `https://api.groq.com/openai/v1/chat/completions` |
+| #   | Error                                                                                        | Fix                                                                                                                                                           |
+| --- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | SEC EDGAR 403 Forbidden                                                                      | Use a real-contact User-Agent from the start                                                                                                                  |
+| 2   | Groq `model_not_found`                                                                       | Call `client.models.list()` first, don't hardcode                                                                                                             |
+| 3   | Ticker-detection always matches                                                              | Match against known tickers, not `word == word.upper()` after uppercasing the whole string                                                                    |
+| 4   | Model won't produce `[1]`-style citations                                                    | Explicit strict prompt + example, code-level regex gate                                                                                                       |
+| 5   | `mlflow.log_table` TypeError                                                                 | Pass a `pandas.DataFrame`, not a list of dicts                                                                                                                |
+| 6   | `uv sync` can't find `databricks-vector-search`                                              | Real package name is `databricks-vectorsearch`                                                                                                                |
+| 7   | Streamlit app `ImportError` on Databricks                                                    | `source_code_path` must be repo root, not just `app/`                                                                                                         |
+| 8   | Azure "Contributor" role missing from list                                                   | It's under "Privileged administrator roles" tab, not "Job function roles"                                                                                     |
+| 9   | Federated credential subject mismatch                                                        | Entity type = "Environment" (matching `environment:` in the workflow), not "Branch"                                                                           |
+| 10  | Azure RBAC doesn't grant Databricks access                                                   | Separately add the SP as a Databricks service principal + UC grants                                                                                           |
+| 11  | "User needs MANAGE permission on resource groq-key"                                          | Grant the deploying SP MANAGE on the secret scope via `secrets/acls/put`                                                                                      |
+| 12  | App stuck `STOPPED` after bundle deploy                                                      | `bundle deploy` doesn't start/deploy apps — call `/start` then `/deployments` explicitly                                                                      |
+| 13  | Vector Search index stuck provisioning                                                       | First-index race condition — delete and recreate the index                                                                                                    |
+| 14  | `InvalidInputException` in deployed app                                                      | Pass `DATABRICKS_HOST`/`CLIENT_ID`/`CLIENT_SECRET` explicitly, auto-detection doesn't work in Apps                                                            |
+| 15  | `MissingSchema` on OIDC token URL                                                            | `DATABRICKS_HOST` env var has no `https://` — prepend it                                                                                                      |
+| 16  | `PermissionDenied` on UC entity from the running app                                         | The app has its OWN service principal — grant it UC + Vector Search endpoint permissions separately from the deploy SP                                        |
+| 17  | `Please provide a valid value for the name field in external_model`                          | Groq model IDs contain `/`, which serving-endpoint external models reject — use a Unity Gateway provider service + model service in the bundle instead (5.2b) |
+| 18  | `Destination model provider service '<catalog>.filings.groq' does not exist` on first deploy | Creation-order race (both created in parallel) — re-run the deploy; the provider was created on the first run                                                 |
+| 19  | Deploy succeeds but Unity Gateway Providers/Models look empty                                | CD's service principal owns them and you have no grant — `grants:` in `resources/ai_gateway.yml` gives `var.admin_user` MANAGE (6.2)                          |
+| 20  | Playground: `404 Unknown request URL: POST /openai/v1` from Groq                             | `provider_type: CUSTOM` posts to `base_url` verbatim — set it to the full `https://api.groq.com/openai/v1/chat/completions`                                   |
 
 
