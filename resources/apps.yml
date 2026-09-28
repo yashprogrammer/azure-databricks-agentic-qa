@@ -4,7 +4,7 @@
 # the pip dependencies. The App no longer binds the Groq key directly — it calls the Unity
 # Gateway model service in resources/ai_gateway.yml, whose provider service holds the key.
 # The App's own service principal needs EXECUTE on that model service — see
-# docs/DEPLOYMENT_GUIDE.md 10.4.
+# docs/DEPLOYMENT_GUIDE.md 6.2.
 
 resources:
   apps:

@@ -25,9 +25,9 @@ end to end.
 [docs/UPGRADE_PLAN.md](docs/UPGRADE_PLAN.md)). Code-complete: ~20-ticker ingestion, LLM-based
 ticker/company detection in `plan_node`, a Databricks Agent Evaluation harness gated in
 `ci.yml`, and Unity Gateway in front of Groq (`resources/ai_gateway.yml`: a model provider
-service + model service, deployed by the bundle). The App's `EXECUTE` grant on the model
-service and the guardrails are manual one-time steps, documented in [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)
-Part 10.4–10.5.
+service + model service, deployed by the bundle along with their grants). Only the
+guardrails are a manual one-time UI step — see [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)
+Parts 6–7.
 
 The code is structured so that swapping backends is a config change, not a rewrite (see
 [Architecture](#architecture) below).
