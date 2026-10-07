@@ -30,7 +30,7 @@ targets:
     mode: development
     default: true
     workspace:
-      host:  https://adb-7405614181918800.0.azuredatabricks.net
+      host: https://adb-7405610344612647.7.azuredatabricks.net
       root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/${bundle.target}
     variables:
       catalog: topsecretcatalog
