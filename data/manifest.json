@@ -1,0 +1,122 @@
+{
+  "AAPL": {
+    "company": "Apple Inc.",
+    "filing_date": "2025-10-31",
+    "accession_number": "0000320193-25-000079",
+    "form": "10-K"
+  },
+  "MSFT": {
+    "company": "MICROSOFT CORP",
+    "filing_date": "2026-07-29",
+    "accession_number": "0001193125-26-323660",
+    "form": "10-K"
+  },
+  "JPM": {
+    "company": "JPMORGAN CHASE & CO",
+    "filing_date": "2026-02-13",
+    "accession_number": "0001628280-26-008131",
+    "form": "10-K"
+  },
+  "GOOGL": {
+    "company": "Alphabet Inc.",
+    "filing_date": "2026-02-05",
+    "accession_number": "0001652044-26-000018",
+    "form": "10-K"
+  },
+  "AMZN": {
+    "company": "AMAZON COM INC",
+    "filing_date": "2026-02-06",
+    "accession_number": "0001018724-26-000004",
+    "form": "10-K"
+  },
+  "META": {
+    "company": "Meta Platforms, Inc.",
+    "filing_date": "2026-01-29",
+    "accession_number": "0001628280-26-003942",
+    "form": "10-K"
+  },
+  "NVDA": {
+    "company": "NVIDIA CORP",
+    "filing_date": "2026-02-25",
+    "accession_number": "0001045810-26-000021",
+    "form": "10-K"
+  },
+  "TSLA": {
+    "company": "Tesla, Inc.",
+    "filing_date": "2026-01-29",
+    "accession_number": "0001628280-26-003952",
+    "form": "10-K"
+  },
+  "JNJ": {
+    "company": "JOHNSON & JOHNSON",
+    "filing_date": "2026-02-11",
+    "accession_number": "0000200406-26-000016",
+    "form": "10-K"
+  },
+  "V": {
+    "company": "VISA INC.",
+    "filing_date": "2025-11-06",
+    "accession_number": "0001403161-25-000089",
+    "form": "10-K"
+  },
+  "WMT": {
+    "company": "Walmart Inc.",
+    "filing_date": "2026-03-13",
+    "accession_number": "0000104169-26-000055",
+    "form": "10-K"
+  },
+  "CVX": {
+    "company": "CHEVRON CORP",
+    "filing_date": "2026-02-24",
+    "accession_number": "0000093410-26-000078",
+    "form": "10-K"
+  },
+  "PG": {
+    "company": "PROCTER & GAMBLE Co",
+    "filing_date": "2026-08-04",
+    "accession_number": "0000080424-26-000103",
+    "form": "10-K"
+  },
+  "HD": {
+    "company": "HOME DEPOT, INC.",
+    "filing_date": "2026-03-18",
+    "accession_number": "0001628280-26-019436",
+    "form": "10-K"
+  },
+  "BAC": {
+    "company": "BANK OF AMERICA CORP /DE/",
+    "filing_date": "2026-02-25",
+    "accession_number": "0000070858-26-000157",
+    "form": "10-K"
+  },
+  "KO": {
+    "company": "COCA COLA CO",
+    "filing_date": "2026-02-20",
+    "accession_number": "0001628280-26-010047",
+    "form": "10-K"
+  },
+  "PEP": {
+    "company": "PEPSICO INC",
+    "filing_date": "2026-02-03",
+    "accession_number": "0000077476-26-000007",
+    "form": "10-K"
+  },
+  "CSCO": {
+    "company": "CISCO SYSTEMS, INC.",
+    "filing_date": "2026-09-02",
+    "accession_number": "0000858877-26-000132",
+    "form": "10-K"
+  },
+  "INTC": {
+    "company": "INTEL CORP",
+    "filing_date": "2026-01-23",
+    "accession_number": "0000050863-26-000011",
+    "form": "10-K"
+  },
+  "DIS": {
+    "company": "Walt Disney Co",
+    "filing_date": "2025-11-13",
+    "accession_number": "0001744489-25-000155",
+    "form": "10-K"
+  }
+}

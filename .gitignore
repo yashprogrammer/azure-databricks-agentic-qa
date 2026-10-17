@@ -3,7 +3,6 @@ __pycache__/
 .venv/
 venv/
 .env
-data/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
@@ -13,3 +12,4 @@ mlflow.db
 .DS_Store
 dist/
 build/
+data/chroma/
