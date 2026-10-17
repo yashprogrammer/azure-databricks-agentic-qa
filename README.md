@@ -1,4 +1,63 @@
-# PolicyPilot
+# Contoso Bank × PolicyPilot — Integrated System
+
+> **Branch `integrated`** of a three-branch forward-deployed-engineering (FDE) project:
+>
+> | Branch | What it is |
+> | --- | --- |
+> | [`legacy`](../../tree/legacy) | Contoso Bank's existing Credit Portal (React + FastAPI), before any AI |
+> | [`poc`](../../tree/poc) | PolicyPilot: the governed, cited 10-K Q&A agent built as the proof of concept |
+> | **`integrated`** | The POC integrated into the Credit Portal as an **AI Credit Memo Draft** tab |
+>
+> The engagement story (client, stakeholders, problem statement, phases, meetings) is in
+> [docs/fde/FDE_ENGAGEMENT_PLAN.md](docs/fde/FDE_ENGAGEMENT_PLAN.md). Contoso Bank and its
+> people are fictional; the 10-K filings are real SEC data.
+
+## What the integration adds
+
+One new tab in the legacy Credit Portal. Every other tab, the layout and the theme are unchanged.
+
+- **Six agent runs, one per credit memo section.** Each run is guard → plan → retrieve →
+  draft → verify (`src/policypilot/memo/agent.py`).
+- **Verified, clickable citations.** Every `[n]` carries a verbatim quote that is checked
+  word for word against the filing. "Open in document" shows the filing with that exact
+  sentence highlighted.
+- **Observability for every answer:** citations, the AI's reasoning, the search plan, the
+  retrieved passages with scores, and run details (model, latency, access check, raw output).
+- **Human in the loop:** per-section feedback (free text plus excerpts quoted from the
+  filing), regenerate, edit by hand, **time travel** across versions, and approve. Approved
+  sections are written into the legacy memo by the portal itself.
+- **Compliance guard:** restricted borrowers and borrowers outside the analyst's portfolio
+  are refused before any model call, and the refusal is logged.
+
+## Run the integrated system locally
+
+Three processes. Put a valid `GROQ_API_KEY` in `.env` first.
+
+```bash
+# 1. Legacy Credit Portal API (port 8100) - first run: seed + download the 10-Ks
+cd legacy/backend && uv sync && uv run python -m app.seed && uv run python -m app.jobs.download_filings
+uv run uvicorn app.main:app --port 8100
+```
+
+```bash
+# 2. AI Credit Memo Draft service (port 8200), from the repo root
+uv sync --extra dev
+uv run uvicorn policypilot.memo.api:app --port 8200
+```
+
+```bash
+# 3. Credit Portal UI (port 5173), proxies /api -> 8100 and /ai -> 8200
+cd legacy/frontend && npm install && npm run dev
+```
+
+Open http://localhost:5173 → **AI Credit Memo Draft** → open `CM-2026-0101` (Apple) →
+**Draft all 6 sections**. The first run on a filing also indexes it (about 20 seconds).
+
+Tests: `uv run pytest` (root, includes the memo agent and API) and `cd legacy/backend && uv run pytest`.
+
+---
+
+# The POC: PolicyPilot
 
 A governed regulatory/policy Q&A copilot — the first of three portfolio projects
 demonstrating agentic AI patterns on Databricks + Azure (Q&A, AI reviewer, generation).

@@ -24,10 +24,10 @@ class GroqLLMClient:
         self._client = Groq(api_key=api_key)
         self._model = model
 
-    def complete(self, system: str, messages: list[dict]) -> str:
+    def complete(self, system: str, messages: list[dict], max_tokens: int = 1024) -> str:
         response = self._client.chat.completions.create(
             model=self._model,
-            max_tokens=1024,
+            max_tokens=max_tokens,
             messages=[{"role": "system", "content": system}, *messages],
         )
         return response.choices[0].message.content or ""
@@ -47,13 +47,13 @@ class DatabricksGatewayLLMClient:
         self._client = WorkspaceClient()
         self._model_service = model_service
 
-    def complete(self, system: str, messages: list[dict]) -> str:
+    def complete(self, system: str, messages: list[dict], max_tokens: int = 1024) -> str:
         response = self._client.api_client.do(
             "POST",
             "/ai-gateway/mlflow/v1/chat/completions",
             body={
                 "model": self._model_service,
-                "max_tokens": 1024,
+                "max_tokens": max_tokens,
                 "messages": [{"role": "system", "content": system}, *messages],
             },
         )

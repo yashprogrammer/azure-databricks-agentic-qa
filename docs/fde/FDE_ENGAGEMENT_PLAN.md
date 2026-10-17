@@ -178,11 +178,11 @@ Contoso's borrowers. It shows that option D works before the bank commits to int
 ### 7.1 Architecture
 
 ```
-  Analyst ──► Credit Portal (App Service)  ── legacy UI, now with a "Draft with AI" panel
-                 │  1. POST /ask {borrower_id, section, question, analyst_email}
+  Analyst ──► Credit Portal (App Service)  ── legacy UI + one new tab: "AI Credit Memo Draft"
+                 │  1. POST /ai/drafts/{memo}/sections/{section}/generate  (one run per section)
                  ▼
-          PolicyPilot Agent API (Azure Databricks)
-           guard → plan → retrieve → answer → verify
+          AI Credit Memo Draft service (PolicyPilot agent, Azure Databricks)
+           guard → plan → retrieve → draft → verify  ──► versioned drafts + traces
              │            │                 │
              │            ▼                 ▼
              │   Vector Search index   Unity AI Gateway model service ──► Groq LLM
@@ -193,9 +193,10 @@ Contoso's borrowers. It shows that option D works before the bank commits to int
              ▼                                     │ borrower list
    Lakehouse Federation ──► Azure SQL (legacy): restricted_list · analyst_portfolio · borrowers
                  │
-  2. Response {answer, citations[], grounded, refusal_reason}
+  2. Version {text, citations[quote, exact offsets], reasoning, trace, grounded}
                  ▼
-  Credit Portal: analyst reviews → "Save to memo" → INSERT memo_sections (portal-owned write)
+  Analyst: review → feedback/quote → regenerate → time travel → approve
+  Credit Portal: "Save approved sections to memo" → UPDATE memo_sections (portal-owned write)
 
   Audit dashboard (Databricks AI/BI): gateway usage + inference tables + refusals ──► MRM, Compliance
 ```
@@ -212,36 +213,40 @@ Contoso's borrowers. It shows that option D works before the bank commits to int
 | Audit and monitoring | None | Gateway usage + inference tables + refusal log → **AI/BI dashboard** for MRM and Compliance | FDE → Jordan, Aisha |
 | Secrets | Key Vault | Same Key Vault; CD reads the Groq key at deploy time | Unchanged |
 
-### 7.3 Integration contract: the Ask API
+### 7.3 Integration contract: the AI Credit Memo Draft API
 
-```http
-POST /api/v1/ask
-Authorization: Bearer <service-principal OAuth token>
+Implemented in `src/policypilot/memo/api.py`. The portal calls it with a service principal
+and passes the signed-in analyst.
 
-{
-  "borrower_id": "B-1042",
-  "section": "liquidity",
-  "question": "What does the latest 10-K say about liquidity and debt maturities?",
-  "analyst_email": "m.lee@contoso.example"
-}
-```
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /ai/drafts/{memo_id}?analyst=` | Workspace: memo, source filing, access check, the six sections with their state and version list |
+| `POST /ai/drafts/{memo_id}/sections/{section}/generate` | One agent run → a new version. Body: `analyst_email`, optional `feedback`, `quotes` (exact excerpts with offsets), `base_version` |
+| `POST .../sections/{section}/edit` | Analyst's own text → a new *human* version (surviving `[n]` markers keep their sources) |
+| `GET .../sections/{section}/versions/{n}` | Any past version, with full trace (time travel) |
+| `POST .../sections/{section}/current` | Make an older or newer version the working version again |
+| `POST .../sections/{section}/approve` | Approve one specific version |
+| `POST .../sections/{section}/saved` | Portal confirms it wrote that version into the legacy memo |
+| `GET /ai/drafts/{memo_id}/events` | Audit trail: every run, refusal, restore, approval and save |
+
+A version looks like this (abridged):
 
 ```json
 {
-  "grounded": true,
-  "answer": "The company reports $X of cash and equivalents [1] ... maturities in 2027 [2].",
-  "citations": [
-    {"n": 1, "accession_number": "0000000000-25-000001", "filing_date": "2025-10-31", "blob_url": "https://.../10k.htm", "snippet": "..."},
-    {"n": 2, "accession_number": "...", "filing_date": "...", "blob_url": "...", "snippet": "..."}
-  ],
-  "refusal_reason": null,
-  "request_id": "a1b2c3"
+  "version_no": 2, "origin": "ai", "based_on": 1,
+  "feedback": "Lead with total debt and the maturity profile.",
+  "quotes": [{"text": "...", "start": 81234, "end": 81390, "line_start": 1657, "line_end": 1657}],
+  "text": "The company had $X of commercial paper outstanding [1] ...",
+  "citations": [{"n": 1, "source": "S3", "quote": "...", "verified": true,
+                 "start": 81234, "end": 81301, "line_start": 1657, "line_end": 1657}],
+  "reasoning": "Relied on S3 (liquidity section) because ... Addressed the feedback by ...",
+  "trace": {"guard": {...}, "queries": [...], "sources": [...], "model": "...", "latency_ms": 4210},
+  "grounded": true, "refusal_reason": null
 }
 ```
 
-`refusal_reason` is one of `restricted_borrower`, `not_in_portfolio`, `no_grounded_answer`,
-`off_topic`. Citations carry the legacy `blob_url`, so the portal can open the exact filing
-in its existing viewer.
+`refusal_reason` is one of `restricted_borrower` and `not_in_portfolio` (both returned as
+HTTP 403 before any model call), or `no_grounded_answer`.
 
 ### 7.4 Design principles
 
@@ -252,6 +257,30 @@ in its existing viewer.
   credit officer approves.
 - **No new secrets in the legacy app:** the portal holds only a Databricks service
   principal identity; the LLM key stays behind Unity AI Gateway.
+
+### 7.5 AI Credit Memo Draft: human-in-the-loop design
+
+The integration adds exactly one tab to the Credit Portal. All other tabs, the layout, theme
+and colours are unchanged.
+
+- **Six independent runs.** Each memo section (business overview, industry, financial
+  performance, liquidity and debt, key risks, legal and regulatory) is drafted by its own agent
+  run with its own search plan. One weak section never contaminates the others, and each
+  can be redone on its own.
+- **Verified citations.** Every `[n]` carries a verbatim quote. The verify step only accepts
+  a citation if the quote is found word for word in the cited passage. It then maps the quote
+  to exact character and line positions in the filing.
+- **Observability per answer.** For every version the analyst sees the citations (with
+  "Open in document", which highlights the exact sentence in the filing), the AI's reasoning,
+  the search plan, every retrieved passage with its score, and run details (model, latency,
+  access check, raw model output).
+- **Feedback loop.** A feedback box per section takes free text plus excerpts the analyst
+  selects in the filing. Quoted excerpts are pinned into the next run's sources, and the
+  previous draft is passed in so the model revises rather than starts over.
+- **Time travel.** Every run, edit and restore appends an immutable version. The analyst can
+  step through older and newer versions and make any of them the working version again.
+- **Approval gate.** Nothing reaches the credit memo until the analyst approves a specific
+  version and clicks "Save approved sections to memo". The portal then performs the write.
 
 ## 8. Engagement plan
 

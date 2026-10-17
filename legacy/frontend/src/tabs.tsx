@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import AiDraft from './ai/AiDraft'
 import type { Route } from './router'
 import Borrowers from './pages/Borrowers'
 import Compliance from './pages/Compliance'
@@ -17,4 +18,6 @@ export const TABS: Tab[] = [
   { key: 'memos', label: 'Credit Memos', render: (r) => <Memos route={r} /> },
   { key: 'search', label: 'Keyword Search', render: (r) => <Search route={r} /> },
   { key: 'compliance', label: 'Compliance', render: () => <Compliance /> },
+  // Integration: the only change to the legacy navigation.
+  { key: 'ai-draft', label: 'AI Credit Memo Draft', render: (r) => <AiDraft route={r} /> },
 ]
