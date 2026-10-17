@@ -1,0 +1,117 @@
+/* Contoso Bank Commercial Credit System - house style (c. 2008 intranet look). */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: #e4e4e4;
+  color: #000;
+  font: 11px Verdana, Tahoma, Arial, sans-serif;
+}
+
+a { color: #0033cc; }
+a:visited { color: #551a8b; }
+a:hover { color: #cc0000; }
+
+h1, h2, h3 { font-family: Verdana, Tahoma, Arial, sans-serif; margin: 0; }
+h2 { font-size: 14px; color: #1f3f6e; margin-bottom: 8px; }
+h3 { font-size: 12px; color: #1f3f6e; }
+
+/* ------------------------------------------------------------- frame */
+.frame { width: 1180px; margin: 0 auto; background: #fff; border-left: 1px solid #7a8899; border-right: 1px solid #7a8899; min-height: 100vh; display: flex; flex-direction: column; }
+
+.banner { height: 60px; background: linear-gradient(#24477a, #0e2747); border-bottom: 3px solid #c9a227; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; color: #fff; }
+.banner .logo { display: flex; align-items: center; gap: 10px; }
+.banner .logo .mark { width: 34px; height: 34px; border: 2px solid #c9a227; background: #0e2747; color: #c9a227; font: bold 20px Georgia, "Times New Roman", serif; display: flex; align-items: center; justify-content: center; }
+.banner .logo .name { font: bold 21px Georgia, "Times New Roman", serif; letter-spacing: 2px; }
+.banner .logo .name small { display: block; font: 10px Verdana, sans-serif; letter-spacing: 1px; color: #c8d4e6; }
+.banner .sys { text-align: right; font-size: 11px; color: #c8d4e6; }
+.banner .sys b { color: #fff; font-size: 12px; }
+
+.userbar { background: #d6dde8; border-bottom: 1px solid #8899aa; padding: 4px 10px; display: flex; justify-content: space-between; align-items: center; }
+.userbar select { font-size: 11px; }
+.userbar .sep { color: #8899aa; margin: 0 6px; }
+
+/* ------------------------------------------------------------- tabs */
+.tabs { display: flex; gap: 2px; padding: 8px 8px 0; background: #eef1f5; border-bottom: 1px solid #7a8899; }
+.tabs a { display: block; padding: 5px 14px; border: 1px solid #7a8899; border-bottom: none; border-radius: 4px 4px 0 0; background: linear-gradient(#f7f7f7, #cfd6df); color: #1f3f6e; font-weight: bold; text-decoration: none; position: relative; top: 1px; }
+.tabs a:hover { background: linear-gradient(#ffffff, #e2e8ef); color: #1f3f6e; }
+.tabs a.active { background: #fff; color: #000; padding-bottom: 6px; }
+
+.content { padding: 10px 12px 16px; flex: 1; }
+
+.breadcrumb { color: #555; margin-bottom: 8px; }
+.breadcrumb a { color: #0033cc; }
+
+/* ------------------------------------------------------------- panels */
+.panel { border: 1px solid #7a8899; margin-bottom: 10px; background: #fff; }
+.panel-title { background: linear-gradient(#5d7ea9, #3e5f8a); color: #fff; font-weight: bold; padding: 3px 6px; font-size: 11px; display: flex; justify-content: space-between; align-items: center; }
+.panel-body { padding: 8px; }
+.row { display: flex; gap: 10px; align-items: flex-start; }
+.col { flex: 1; min-width: 0; }
+
+fieldset { border: 1px solid #a5b3c4; padding: 6px 8px 8px; margin: 0 0 8px; }
+legend { color: #1f3f6e; font-weight: bold; padding: 0 4px; }
+
+table.form td { padding: 2px 6px 2px 0; vertical-align: top; }
+table.form td.lbl { color: #333; font-weight: bold; white-space: nowrap; width: 150px; }
+
+/* ------------------------------------------------------------- data grids */
+table.grid { width: 100%; border-collapse: collapse; }
+table.grid th { background: #dfe6ef; border: 1px solid #a5b3c4; padding: 3px 5px; text-align: left; color: #1f3f6e; white-space: nowrap; }
+table.grid td { border: 1px solid #c5cdd8; padding: 3px 5px; vertical-align: top; }
+table.grid tr:nth-child(even) td { background: #f3f6fa; }
+table.grid tr:hover td { background: #ffffcc; }
+td.num { text-align: right; font-family: "Courier New", monospace; }
+
+/* ------------------------------------------------------------- controls */
+button, .btn {
+  font: 11px Verdana, Tahoma, sans-serif;
+  background: linear-gradient(#fdfdfd, #d4d4d4);
+  border: 1px solid #7f7f7f;
+  border-radius: 2px;
+  padding: 2px 10px;
+  color: #000;
+  cursor: pointer;
+}
+button:hover { background: linear-gradient(#ffffff, #e6e6e6); }
+button:active { background: linear-gradient(#cfcfcf, #ececec); }
+button:disabled { color: #8a8a8a; cursor: default; }
+button.primary { font-weight: bold; }
+
+input[type="text"], input[type="number"], select, textarea {
+  font: 11px Verdana, Tahoma, sans-serif;
+  border: 1px solid #7f9db9;
+  padding: 2px 3px;
+  background: #fff;
+}
+textarea { width: 100%; resize: vertical; font-family: Verdana, Tahoma, sans-serif; line-height: 1.45; }
+
+/* ------------------------------------------------------------- status + alerts */
+.status { font-weight: bold; }
+.status-Draft { color: #996600; }
+.status-Submitted { color: #0033cc; }
+.status-Approved { color: #006600; }
+.status-Returned { color: #cc0000; }
+
+.flag-restricted { color: #cc0000; font-weight: bold; background: #fff0f0; border: 1px solid #cc0000; padding: 0 3px; font-size: 10px; }
+.alert { border: 1px solid #cc9900; background: #fffbe5; padding: 6px 8px; margin-bottom: 8px; }
+.alert-red { border-color: #cc0000; background: #fff0f0; color: #990000; }
+.notice { border: 1px dashed #8899aa; background: #f8f9fb; padding: 6px 8px; color: #333; }
+.muted { color: #666; }
+.small { font-size: 10px; }
+.mono { font-family: "Courier New", monospace; }
+
+/* ------------------------------------------------------------- filing viewer */
+.viewer { border: 1px solid #7a8899; background: #fefefe; height: 560px; overflow: auto; font: 12px "Courier New", monospace; }
+.viewer .ln { display: flex; }
+.viewer .ln .no { width: 56px; flex: none; text-align: right; padding-right: 8px; color: #8899aa; background: #f0f3f7; border-right: 1px solid #d0d7e0; user-select: none; }
+.viewer .ln .tx { padding-left: 6px; white-space: pre-wrap; word-break: break-word; }
+.viewer .ln.hit .tx { background: #ffff99; }
+mark { background: #ffff66; }
+
+.toolbar { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+
+/* ------------------------------------------------------------- footer */
+.footer { border-top: 1px solid #7a8899; background: #eef1f5; padding: 6px 10px; text-align: center; color: #666; font-size: 10px; }
+.statusbar { background: #d4d0c8; border-top: 1px solid #fff; box-shadow: inset 0 1px 0 #808080; padding: 2px 8px; display: flex; justify-content: space-between; font-size: 10px; color: #222; }
