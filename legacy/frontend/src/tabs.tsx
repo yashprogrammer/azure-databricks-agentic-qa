@@ -1,0 +1,20 @@
+import type { ReactNode } from 'react'
+import type { Route } from './router'
+import Borrowers from './pages/Borrowers'
+import Compliance from './pages/Compliance'
+import Dashboard from './pages/Dashboard'
+import Filings from './pages/Filings'
+import Memos from './pages/Memos'
+import Search from './pages/Search'
+
+export type Tab = { key: string; label: string; render: (route: Route) => ReactNode }
+
+// Main navigation of the Credit Portal. Order = order of the tab strip.
+export const TABS: Tab[] = [
+  { key: 'dashboard', label: 'Dashboard', render: () => <Dashboard /> },
+  { key: 'borrowers', label: 'Borrowers', render: (r) => <Borrowers route={r} /> },
+  { key: 'filings', label: 'Filing Library', render: (r) => <Filings route={r} /> },
+  { key: 'memos', label: 'Credit Memos', render: (r) => <Memos route={r} /> },
+  { key: 'search', label: 'Keyword Search', render: (r) => <Search route={r} /> },
+  { key: 'compliance', label: 'Compliance', render: () => <Compliance /> },
+]
