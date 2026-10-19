@@ -15,8 +15,8 @@ function MemoList() {
   const [mine, setMine] = useState(user.role === 'analyst')
 
   useEffect(() => {
-    api.memos(mine ? user.email : undefined, status || undefined).then(setRows)
-  }, [mine, status, user.email])
+    api.memos(mine, status || undefined).then(setRows)
+  }, [mine, status])
 
   return (
     <>
@@ -103,11 +103,11 @@ function MemoEditor({ id }: { id: string }) {
     run(async () => {
       for (const s of memo.sections) {
         if ((bodies[s.section_type] ?? '') !== s.body) {
-          await api.saveSection(memo.memo_id, s.section_type, bodies[s.section_type] ?? '', user.email)
+          await api.saveSection(memo.memo_id, s.section_type, bodies[s.section_type] ?? '')
         }
       }
       if (recommendation !== memo.recommendation) {
-        await api.saveRecommendation(memo.memo_id, recommendation, user.email)
+        await api.saveRecommendation(memo.memo_id, recommendation)
       }
     }, 'Memo saved')
 
@@ -180,17 +180,17 @@ function MemoEditor({ id }: { id: string }) {
         {editable && (
           <>
             <button className="primary" onClick={saveAll}>Save Memo</button>
-            <button onClick={() => run(() => api.transition(memo.memo_id, 'submit', user.email), 'Submitted for approval')}>
+            <button onClick={() => run(() => api.transition(memo.memo_id, 'submit'), 'Submitted for approval')}>
               Submit for Approval
             </button>
           </>
         )}
         {isOfficer && memo.status === 'Submitted' && (
           <>
-            <button className="primary" onClick={() => run(() => api.transition(memo.memo_id, 'approve', user.email), 'Memo approved')}>
+            <button className="primary" onClick={() => run(() => api.transition(memo.memo_id, 'approve'), 'Memo approved')}>
               Approve
             </button>
-            <button onClick={() => run(() => api.transition(memo.memo_id, 'return', user.email), 'Memo returned to analyst')}>
+            <button onClick={() => run(() => api.transition(memo.memo_id, 'return'), 'Memo returned to analyst')}>
               Return to Analyst
             </button>
           </>

@@ -1,29 +1,40 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api, type User } from './api'
-import { go, useRoute } from './router'
-import { SESSION_KEY, SessionContext } from './session'
+import { getToken, signOut } from './auth'
+import { useRoute } from './router'
+import { SessionContext } from './session'
+import SignIn from './SignIn'
 import { TABS } from './tabs'
 
 export default function App() {
   const route = useRoute()
-  const [users, setUsers] = useState<User[]>([])
-  const [userEmail, setUserEmail] = useState(
-    () => localStorage.getItem(SESSION_KEY) ?? 'm.lee@contoso.example',
-  )
-  const [connected, setConnected] = useState(true)
+  const [signedIn, setSignedIn] = useState(() => getToken() !== null)
+  const [user, setUser] = useState<User | null>(null)
+  const [error, setError] = useState('')
 
-  useEffect(() => {
-    api.users().then(setUsers).catch(() => setConnected(false))
+  const loadUser = useCallback(() => {
+    if (!getToken()) return
+    setError('')
+    api.me().then(setUser).catch((e) => setError(String(e)))
   }, [])
 
-  const user = users.find((u) => u.email === userEmail) ?? null
-  const active = TABS.find((t) => t.key === route.path[0]) ?? TABS[0]
+  useEffect(() => {
+    const onAuthChange = () => {
+      const has = getToken() !== null
+      setSignedIn(has)
+      if (!has) setUser(null)
+    }
+    window.addEventListener('auth:changed', onAuthChange)
+    return () => window.removeEventListener('auth:changed', onAuthChange)
+  }, [])
 
-  const switchUser = (email: string) => {
-    localStorage.setItem(SESSION_KEY, email)
-    setUserEmail(email)
-    go('#/dashboard')
-  }
+  useEffect(() => {
+    if (signedIn) loadUser()
+  }, [signedIn, loadUser])
+
+  if (!signedIn) return <SignIn onSignedIn={() => setSignedIn(true)} />
+
+  const active = TABS.find((t) => t.key === route.path[0]) ?? TABS[0]
 
   return (
     <div className="frame">
@@ -44,14 +55,8 @@ export default function App() {
 
       <div className="userbar">
         <div>
-          User:{' '}
-          <select value={userEmail} onChange={(e) => switchUser(e.target.value)}>
-            {users.map((u) => (
-              <option key={u.email} value={u.email}>
-                {u.name} ({u.email})
-              </option>
-            ))}
-          </select>
+          Signed in as <b>{user?.name ?? '...'}</b>
+          {user && <span className="muted"> ({user.email})</span>}
           <span className="sep">|</span>
           Role: <b>{user?.title ?? '-'}</b>
         </div>
@@ -60,7 +65,7 @@ export default function App() {
           <span className="sep">|</span>
           <a href="#/dashboard" onClick={() => alert('Contact the IT Service Desk at ext. 4357.')}>Help</a>
           <span className="sep">|</span>
-          <a href="#/dashboard" onClick={() => alert('Session ended. Please close your browser.')}>Log off</a>
+          <a href="#/dashboard" onClick={(e) => { e.preventDefault(); signOut() }}>Sign out</a>
         </div>
       </div>
 
@@ -73,9 +78,11 @@ export default function App() {
       </div>
 
       <div className="content">
-        {!connected ? (
+        {error ? (
           <div className="alert alert-red">
-            Unable to contact the Credit Portal server. Please try again later or call the IT Service Desk.
+            {error.startsWith('403')
+              ? `Your account is not set up for the Credit Portal. Contact the IT Service Desk. (${error})`
+              : `Unable to contact the Credit Portal server. Please try again later. (${error})`}
           </div>
         ) : user ? (
           <SessionContext.Provider value={user}>{active.render(route)}</SessionContext.Provider>
@@ -89,7 +96,7 @@ export default function App() {
         internal use only. All activity is monitored. Session timeout 15 minutes.
       </div>
       <div className="statusbar">
-        <span>{connected ? 'Ready' : 'Disconnected'}</span>
+        <span>{error ? 'Error' : 'Ready'}</span>
         <span>Server: CRPRD01 &nbsp;|&nbsp; DB: CREDITDB</span>
       </div>
     </div>

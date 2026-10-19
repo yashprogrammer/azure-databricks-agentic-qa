@@ -11,7 +11,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     setData(null)
-    api.dashboard(user.email).then(setData).catch((e) => setError(String(e)))
+    api.dashboard().then(setData).catch((e) => setError(String(e)))
   }, [user.email])
 
   if (error) return <div className="alert alert-red">{error}</div>

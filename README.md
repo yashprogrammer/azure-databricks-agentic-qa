@@ -40,7 +40,32 @@ npm install
 npm run dev                                  # http://localhost:5173
 ```
 
-Switch users with the **User** dropdown: Marcus Lee / Ana Ruiz / Daniel Cho (analysts),
-Priya Raman (credit officer: approves memos), Aisha Karim (compliance).
+## Sign-in and permissions
+
+Users sign in through single sign-on; the APIs take the user **only** from a validated
+bearer token (RS256 JWT: signature, issuer, audience and expiry are checked) and enforce
+roles and ownership server-side (`legacy/backend/app/auth.py`).
+
+Locally, a **development identity provider** (`app/dev_idp.py`, mounted at `/dev-idp`) stands in
+for Microsoft Entra ID and issues tokens with the same claims Entra ID uses
+(`preferred_username`, `name`, `roles`). Fictional test accounts, all with the development
+password `contoso-dev` (override with `DEV_IDP_PASSWORD`):
+
+| User ID | Person | App role | Can |
+| --- | --- | --- | --- |
+| `m.lee@contoso.example` | Marcus Lee | `Credit.Analyst` | Prepare memos for borrowers in his portfolio |
+| `a.ruiz@contoso.example` | Ana Ruiz | `Credit.Analyst` | Same, for her portfolio |
+| `d.cho@contoso.example` | Daniel Cho | `Credit.Analyst` | Same, for his portfolio |
+| `p.raman@contoso.example` | Priya Raman | `Credit.Officer` | Approve or return submitted memos |
+| `a.karim@contoso.example` | Aisha Karim | `Compliance.Reviewer` | Read-only oversight |
+
+On Azure, turn the development IdP off and point the API at Entra ID:
+
+```bash
+DEV_IDP_ENABLED=false
+AUTH_ISSUER=https://login.microsoftonline.com/<tenant-id>/v2.0
+AUTH_AUDIENCE=api://<credit-portal-api-client-id>
+AUTH_JWKS_URL=https://login.microsoftonline.com/<tenant-id>/discovery/v2.0/keys
+```
 
 Tests: `cd legacy/backend && uv run pytest`.

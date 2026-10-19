@@ -1,10 +1,14 @@
 """Contoso Bank Commercial Credit Portal - REST API (v4).
 
 Run locally: `uv run uvicorn app.main:app --port 8100 --reload`
+
+Every endpoint requires a bearer token; the user is taken from the validated token only
+(see app/auth.py). Role and ownership rules are enforced here, not in the UI.
 """
 
 from __future__ import annotations
 
+import os
 from datetime import date, datetime
 
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -13,17 +17,17 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.auth import CurrentUser, analyst_user, current_user, officer_user
 from app.config import MEMO_SECTIONS, SECTION_TYPES
 from app.db import (
     ActivityLog,
-    Analyst,
     AnalystPortfolio,
     Borrower,
     CreditMemo,
     Filing,
     MemoSection,
     RestrictedEntry,
-    SessionLocal,
+    get_session,
     init_db,
 )
 from app.storage import document_exists, read_document
@@ -37,14 +41,18 @@ app.add_middleware(
 )
 
 
+if os.environ.get("DEV_IDP_ENABLED", "true").lower() == "true":
+    from app.dev_idp import router as dev_idp_router
+
+    app.include_router(dev_idp_router)  # local development only; Entra ID on Azure
+
+
 @app.on_event("startup")
 def _startup() -> None:
     init_db()
 
 
-def db():
-    with SessionLocal() as s:
-        yield s
+db = get_session
 
 
 def _log(s: Session, actor: str, action: str) -> None:
@@ -87,28 +95,34 @@ def _memo_row(m: CreditMemo, b: Borrower | None = None) -> dict:
 
 # ---------------------------------------------------------------- session / reference data
 
-@app.get("/api/users")
-def users(s: Session = Depends(db)):
-    return [{"email": a.email, "name": a.name, "title": a.title, "role": a.role}
-            for a in s.scalars(select(Analyst).order_by(Analyst.name))]
+@app.get("/api/me")
+def me(user: CurrentUser = Depends(current_user)):
+    return {"email": user.email, "name": user.name, "title": user.title, "role": user.role,
+            "roles": sorted(user.roles)}
 
 
 @app.get("/api/memo-template")
-def memo_template():
+def memo_template(user: CurrentUser = Depends(current_user)):
     return [{"section_type": k, "title": t} for k, t in MEMO_SECTIONS]
 
 
-@app.get("/api/portfolio")
-def portfolio(analyst: str, s: Session = Depends(db)):
+def _portfolio_ids(s: Session, email: str) -> list[str]:
     return list(s.scalars(select(AnalystPortfolio.borrower_id)
-                          .where(AnalystPortfolio.analyst_email == analyst)))
+                          .where(AnalystPortfolio.analyst_email == email)))
+
+
+@app.get("/api/portfolio")
+def portfolio(user: CurrentUser = Depends(current_user), s: Session = Depends(db)):
+    """Borrower IDs in the signed-in user's portfolio."""
+    return _portfolio_ids(s, user.email)
 
 
 # ---------------------------------------------------------------- dashboard
 
 @app.get("/api/dashboard")
-def dashboard(analyst: str, s: Session = Depends(db)):
-    my_ids = portfolio(analyst, s)
+def dashboard(user: CurrentUser = Depends(current_user), s: Session = Depends(db)):
+    analyst = user.email
+    my_ids = _portfolio_ids(s, analyst)
     restricted = _restricted_ids(s)
     borrowers = s.scalars(select(Borrower).where(Borrower.borrower_id.in_(my_ids))
                           .order_by(Borrower.next_review)).all()
@@ -128,10 +142,11 @@ def dashboard(analyst: str, s: Session = Depends(db)):
 # ---------------------------------------------------------------- borrowers
 
 @app.get("/api/borrowers")
-def borrowers(q: str = "", analyst: str | None = None, s: Session = Depends(db)):
+def borrowers(q: str = "", mine: bool = False, user: CurrentUser = Depends(current_user),
+              s: Session = Depends(db)):
     query = select(Borrower).order_by(Borrower.borrower_id)
-    if analyst:
-        query = query.where(Borrower.borrower_id.in_(portfolio(analyst, s)))
+    if mine:
+        query = query.where(Borrower.borrower_id.in_(_portfolio_ids(s, user.email)))
     if q:
         like = f"%{q}%"
         query = query.where(Borrower.name.ilike(like) | Borrower.ticker.ilike(like)
@@ -141,7 +156,7 @@ def borrowers(q: str = "", analyst: str | None = None, s: Session = Depends(db))
 
 
 @app.get("/api/borrowers/{borrower_id}")
-def borrower(borrower_id: str, s: Session = Depends(db)):
+def borrower(borrower_id: str, user: CurrentUser = Depends(current_user), s: Session = Depends(db)):
     b = s.get(Borrower, borrower_id)
     if not b:
         raise HTTPException(404, "Borrower not found")
@@ -166,7 +181,8 @@ def borrower(borrower_id: str, s: Session = Depends(db)):
 # ---------------------------------------------------------------- filings
 
 @app.get("/api/filings")
-def filings(borrower_id: str | None = None, s: Session = Depends(db)):
+def filings(borrower_id: str | None = None, user: CurrentUser = Depends(current_user),
+            s: Session = Depends(db)):
     query = (select(Filing, Borrower.ticker).join(Borrower, Borrower.borrower_id == Filing.borrower_id)
              .order_by(Borrower.ticker, Filing.filing_date.desc()))
     if borrower_id:
@@ -175,7 +191,7 @@ def filings(borrower_id: str | None = None, s: Session = Depends(db)):
 
 
 @app.get("/api/filings/{filing_id}")
-def filing(filing_id: int, s: Session = Depends(db)):
+def filing(filing_id: int, user: CurrentUser = Depends(current_user), s: Session = Depends(db)):
     f = s.get(Filing, filing_id)
     if not f:
         raise HTTPException(404, "Filing not found")
@@ -183,7 +199,8 @@ def filing(filing_id: int, s: Session = Depends(db)):
 
 
 @app.get("/api/filings/{filing_id}/text")
-def filing_text(filing_id: int, s: Session = Depends(db)):
+def filing_text(filing_id: int, user: CurrentUser = Depends(current_user),
+                s: Session = Depends(db)):
     f = s.get(Filing, filing_id)
     if not f or not document_exists(f.blob_path):
         raise HTTPException(404, "Document not found in filing store")
@@ -193,8 +210,8 @@ def filing_text(filing_id: int, s: Session = Depends(db)):
 # ---------------------------------------------------------------- keyword search
 
 @app.get("/api/search")
-def search(q: str = Query(min_length=2), borrower_id: str | None = None,
-           limit: int = 200, s: Session = Depends(db)):
+def search(q: str = Query(min_length=2), borrower_id: str | None = None, limit: int = 200,
+           user: CurrentUser = Depends(current_user), s: Session = Depends(db)):
     """Legacy keyword search: case-insensitive substring match, line by line."""
     query = select(Filing, Borrower.ticker).join(Borrower, Borrower.borrower_id == Filing.borrower_id)
     if borrower_id:
@@ -218,55 +235,52 @@ def search(q: str = Query(min_length=2), borrower_id: str | None = None,
 
 class NewMemo(BaseModel):
     borrower_id: str
-    analyst_email: str
 
 
 class SectionUpdate(BaseModel):
     body: str
-    updated_by: str
 
 
 class RecommendationUpdate(BaseModel):
     recommendation: str
-    updated_by: str
-
-
-class Decision(BaseModel):
-    actor: str
 
 
 @app.get("/api/memos")
-def memos(analyst: str | None = None, status: str | None = None, s: Session = Depends(db)):
+def memos(mine: bool = False, status: str | None = None,
+          user: CurrentUser = Depends(current_user), s: Session = Depends(db)):
     query = (select(CreditMemo, Borrower).join(Borrower, Borrower.borrower_id == CreditMemo.borrower_id)
              .order_by(CreditMemo.review_year.desc(), CreditMemo.memo_id))
-    if analyst:
-        query = query.where(CreditMemo.analyst_email == analyst)
+    if mine:
+        query = query.where(CreditMemo.analyst_email == user.email)
     if status:
         query = query.where(CreditMemo.status == status)
     return [_memo_row(m, b) for m, b in s.execute(query)]
 
 
 @app.post("/api/memos")
-def create_memo(body: NewMemo, s: Session = Depends(db)):
+def create_memo(body: NewMemo, user: CurrentUser = Depends(analyst_user),
+                s: Session = Depends(db)):
     if not s.get(Borrower, body.borrower_id):
         raise HTTPException(404, "Borrower not found")
+    if body.borrower_id not in _portfolio_ids(s, user.email):
+        raise HTTPException(403, "Borrower is not in your portfolio")
     year = date.today().year
     seq = s.scalar(select(func.count()).select_from(CreditMemo)
                    .where(CreditMemo.review_year == year)) + 101
     memo_id = f"CM-{year}-{seq:04d}"
     now = datetime.now()
-    s.add(CreditMemo(memo_id=memo_id, borrower_id=body.borrower_id, analyst_email=body.analyst_email,
+    s.add(CreditMemo(memo_id=memo_id, borrower_id=body.borrower_id, analyst_email=user.email,
                      review_year=year, status="Draft", created_at=now, updated_at=now))
     s.flush()
     for section_type in SECTION_TYPES:
         s.add(MemoSection(memo_id=memo_id, section_type=section_type, body=""))
-    _log(s, body.analyst_email, f"Created credit memo {memo_id} for {body.borrower_id}")
+    _log(s, user.email, f"Created credit memo {memo_id} for {body.borrower_id}")
     s.commit()
     return {"memo_id": memo_id}
 
 
 @app.get("/api/memos/{memo_id}")
-def memo(memo_id: str, s: Session = Depends(db)):
+def memo(memo_id: str, user: CurrentUser = Depends(current_user), s: Session = Depends(db)):
     m = s.get(CreditMemo, memo_id)
     if not m:
         raise HTTPException(404, "Memo not found")
@@ -286,37 +300,42 @@ def memo(memo_id: str, s: Session = Depends(db)):
     }
 
 
-def _editable_memo(s: Session, memo_id: str) -> CreditMemo:
+def _editable_memo(s: Session, memo_id: str, user: CurrentUser) -> CreditMemo:
     m = s.get(CreditMemo, memo_id)
     if not m:
         raise HTTPException(404, "Memo not found")
+    if m.analyst_email != user.email:
+        raise HTTPException(403, "Only the preparing analyst can edit this memo")
     if m.status not in ("Draft", "Returned"):
         raise HTTPException(409, f"Memo is {m.status} and can no longer be edited")
     return m
 
 
 @app.put("/api/memos/{memo_id}/sections/{section_type}")
-def update_section(memo_id: str, section_type: str, body: SectionUpdate, s: Session = Depends(db)):
+def update_section(memo_id: str, section_type: str, body: SectionUpdate,
+                   user: CurrentUser = Depends(analyst_user), s: Session = Depends(db)):
     if section_type not in SECTION_TYPES:
         raise HTTPException(404, "Unknown section")
-    m = _editable_memo(s, memo_id)
+    m = _editable_memo(s, memo_id, user)
     sec = s.scalar(select(MemoSection).where(MemoSection.memo_id == memo_id,
                                              MemoSection.section_type == section_type))
     if not sec:
         sec = MemoSection(memo_id=memo_id, section_type=section_type)
         s.add(sec)
-    sec.body, sec.updated_by, sec.updated_at = body.body, body.updated_by, datetime.now()
+    sec.body, sec.updated_by, sec.updated_at = body.body, user.email, datetime.now()
     m.updated_at = datetime.now()
-    _log(s, body.updated_by, f"Updated section '{section_type}' of {memo_id}")
+    _log(s, user.email, f"Updated section '{section_type}' of {memo_id}")
     s.commit()
     return {"ok": True}
 
 
 @app.put("/api/memos/{memo_id}/recommendation")
-def update_recommendation(memo_id: str, body: RecommendationUpdate, s: Session = Depends(db)):
-    m = _editable_memo(s, memo_id)
+def update_recommendation(memo_id: str, body: RecommendationUpdate,
+                          user: CurrentUser = Depends(analyst_user),
+                          s: Session = Depends(db)):
+    m = _editable_memo(s, memo_id, user)
     m.recommendation, m.updated_at = body.recommendation, datetime.now()
-    _log(s, body.updated_by, f"Updated recommendation of {memo_id}")
+    _log(s, user.email, f"Updated recommendation of {memo_id}")
     s.commit()
     return {"ok": True}
 
@@ -336,24 +355,30 @@ def _transition(s: Session, memo_id: str, actor: str, allowed: tuple[str, ...], 
 
 
 @app.post("/api/memos/{memo_id}/submit")
-def submit(memo_id: str, body: Decision, s: Session = Depends(db)):
-    return _transition(s, memo_id, body.actor, ("Draft", "Returned"), "Submitted")
+def submit(memo_id: str, user: CurrentUser = Depends(analyst_user),
+           s: Session = Depends(db)):
+    m = s.get(CreditMemo, memo_id)
+    if m and m.analyst_email != user.email:
+        raise HTTPException(403, "Only the preparing analyst can submit this memo")
+    return _transition(s, memo_id, user.email, ("Draft", "Returned"), "Submitted")
 
 
 @app.post("/api/memos/{memo_id}/approve")
-def approve(memo_id: str, body: Decision, s: Session = Depends(db)):
-    return _transition(s, memo_id, body.actor, ("Submitted",), "Approved")
+def approve(memo_id: str, user: CurrentUser = Depends(officer_user),
+            s: Session = Depends(db)):
+    return _transition(s, memo_id, user.email, ("Submitted",), "Approved")
 
 
 @app.post("/api/memos/{memo_id}/return")
-def return_memo(memo_id: str, body: Decision, s: Session = Depends(db)):
-    return _transition(s, memo_id, body.actor, ("Submitted",), "Returned")
+def return_memo(memo_id: str, user: CurrentUser = Depends(officer_user),
+                s: Session = Depends(db)):
+    return _transition(s, memo_id, user.email, ("Submitted",), "Returned")
 
 
 # ---------------------------------------------------------------- compliance
 
 @app.get("/api/restricted")
-def restricted(s: Session = Depends(db)):
+def restricted(user: CurrentUser = Depends(current_user), s: Session = Depends(db)):
     rows = s.execute(select(RestrictedEntry, Borrower)
                      .join(Borrower, Borrower.borrower_id == RestrictedEntry.borrower_id)).all()
     return [{"borrower_id": r.borrower_id, "ticker": b.ticker, "name": b.name, "reason": r.reason,

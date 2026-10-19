@@ -116,3 +116,9 @@ class ActivityLog(Base):
 
 def init_db() -> None:
     Base.metadata.create_all(engine)
+
+
+def get_session():
+    """FastAPI dependency: one database session per request."""
+    with SessionLocal() as s:
+        yield s

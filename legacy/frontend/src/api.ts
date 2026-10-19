@@ -1,6 +1,9 @@
 // Thin client for the Credit Portal API (proxied to http://localhost:8100 in dev).
+// Every call carries the signed-in user's bearer token; the API takes identity from it.
 
-export type User = { email: string; name: string; title: string; role: string }
+import { getToken, sessionExpired } from './auth'
+
+export type User = { email: string; name: string; title: string; role: string; roles: string[] }
 
 export type Borrower = {
   borrower_id: string
@@ -77,11 +80,17 @@ export type SearchHit = {
   snippet: string
 }
 
+export function authHeaders(): Record<string, string> {
+  const token = getToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    headers: { 'Content-Type': 'application/json', ...authHeaders(), ...(init?.headers ?? {}) },
   })
+  if (res.status === 401) sessionExpired()
   if (!res.ok) {
     let detail = res.statusText
     try {
@@ -94,51 +103,45 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
-const qs = (params: Record<string, string | undefined>) => {
+const qs = (params: Record<string, string | boolean | undefined>) => {
   const p = new URLSearchParams()
-  Object.entries(params).forEach(([k, v]) => v && p.set(k, v))
+  Object.entries(params).forEach(([k, v]) => v && p.set(k, String(v)))
   const s = p.toString()
   return s ? `?${s}` : ''
 }
 
 export const api = {
-  users: () => request<User[]>('/api/users'),
-  dashboard: (analyst: string) =>
+  me: () => request<User>('/api/me'),
+  dashboard: () =>
     request<{
       work_queue: Borrower[]
       memo_counts: Record<string, number>
       filings_on_file: number
       activity: { at: string; actor: string; action: string }[]
-    }>(`/api/dashboard${qs({ analyst })}`),
-  borrowers: (q?: string, analyst?: string) => request<Borrower[]>(`/api/borrowers${qs({ q, analyst })}`),
+    }>('/api/dashboard'),
+  borrowers: (q?: string, mine?: boolean) => request<Borrower[]>(`/api/borrowers${qs({ q, mine })}`),
   borrower: (id: string) => request<BorrowerDetail>(`/api/borrowers/${id}`),
   filings: (borrower_id?: string) => request<Filing[]>(`/api/filings${qs({ borrower_id })}`),
   filing: (id: number) => request<Filing>(`/api/filings/${id}`),
   filingText: (id: number) => request<{ filing_id: number; text: string }>(`/api/filings/${id}/text`),
   search: (q: string, borrower_id?: string) =>
     request<{ query: string; truncated: boolean; hits: SearchHit[] }>(`/api/search${qs({ q, borrower_id })}`),
-  memos: (analyst?: string, status?: string) => request<Memo[]>(`/api/memos${qs({ analyst, status })}`),
+  memos: (mine?: boolean, status?: string) => request<Memo[]>(`/api/memos${qs({ mine, status })}`),
   memo: (id: string) => request<MemoDetail>(`/api/memos/${id}`),
-  createMemo: (borrower_id: string, analyst_email: string) =>
-    request<{ memo_id: string }>('/api/memos', {
-      method: 'POST',
-      body: JSON.stringify({ borrower_id, analyst_email }),
-    }),
-  saveSection: (memoId: string, sectionType: string, body: string, updated_by: string) =>
+  createMemo: (borrower_id: string) =>
+    request<{ memo_id: string }>('/api/memos', { method: 'POST', body: JSON.stringify({ borrower_id }) }),
+  saveSection: (memoId: string, sectionType: string, body: string) =>
     request<{ ok: boolean }>(`/api/memos/${memoId}/sections/${sectionType}`, {
       method: 'PUT',
-      body: JSON.stringify({ body, updated_by }),
+      body: JSON.stringify({ body }),
     }),
-  saveRecommendation: (memoId: string, recommendation: string, updated_by: string) =>
+  saveRecommendation: (memoId: string, recommendation: string) =>
     request<{ ok: boolean }>(`/api/memos/${memoId}/recommendation`, {
       method: 'PUT',
-      body: JSON.stringify({ recommendation, updated_by }),
+      body: JSON.stringify({ recommendation }),
     }),
-  transition: (memoId: string, action: 'submit' | 'approve' | 'return', actor: string) =>
-    request<{ ok: boolean; status: string }>(`/api/memos/${memoId}/${action}`, {
-      method: 'POST',
-      body: JSON.stringify({ actor }),
-    }),
+  transition: (memoId: string, action: 'submit' | 'approve' | 'return') =>
+    request<{ ok: boolean; status: string }>(`/api/memos/${memoId}/${action}`, { method: 'POST' }),
   restricted: () => request<RestrictedRow[]>('/api/restricted'),
 }
 
