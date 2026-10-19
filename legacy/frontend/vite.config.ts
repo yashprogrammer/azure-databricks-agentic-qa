@@ -8,6 +8,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': 'http://localhost:8100',
+      '/dev-idp': 'http://localhost:8100', // development identity provider (Entra ID on Azure)
       '/ai': 'http://localhost:8200', // AI Credit Memo Draft service (integration)
     },
   },

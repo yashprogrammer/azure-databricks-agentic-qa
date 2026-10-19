@@ -9,12 +9,11 @@ export default function Borrowers({ route }: { route: Route }) {
 }
 
 function BorrowerList() {
-  const user = useSession()
   const [rows, setRows] = useState<Borrower[]>([])
   const [q, setQ] = useState('')
   const [mine, setMine] = useState(false)
 
-  const load = () => api.borrowers(q, mine ? user.email : undefined).then(setRows)
+  const load = () => api.borrowers(q, mine).then(setRows)
   useEffect(() => {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -79,7 +78,7 @@ function BorrowerProfile({ id }: { id: string }) {
   if (!b) return <div className="muted">Loading borrower...</div>
 
   const createMemo = async () => {
-    const { memo_id } = await api.createMemo(b.borrower_id, user.email)
+    const { memo_id } = await api.createMemo(b.borrower_id)
     go(`#/memos/${memo_id}`)
   }
 
@@ -158,7 +157,9 @@ function BorrowerProfile({ id }: { id: string }) {
       <div className="panel">
         <div className="panel-title">
           Credit Memos
-          <button onClick={createMemo}>Create Credit Memo</button>
+          {user.role === 'analyst' && b.covering_analysts.includes(user.email) && (
+            <button onClick={createMemo}>Create Credit Memo</button>
+          )}
         </div>
         <div className="panel-body">
           <table className="grid">
