@@ -39,7 +39,7 @@ class FakeLegacy:
     def restricted_ids(self):
         return self._restricted
 
-    def portfolio(self, analyst_email):
+    def portfolio(self):
         return self._portfolio
 
 

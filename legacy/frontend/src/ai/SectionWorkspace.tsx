@@ -1,5 +1,4 @@
 import { Fragment, useEffect, useState } from 'react'
-import { useSession } from '../session'
 import { aiApi, type Citation, type DraftEvent, type DraftSection, type QuoteRef, type Version, type VersionSummary } from './aiApi'
 import DocViewer from './DocViewer'
 
@@ -11,7 +10,7 @@ type Props = {
   canRun: boolean
   editable: boolean
   running: boolean
-  onRun: (body: { analyst_email: string; feedback?: string; quotes?: QuoteRef[]; base_version?: number | null }) => Promise<void>
+  onRun: (body: { feedback?: string; quotes?: QuoteRef[]; base_version?: number | null }) => Promise<void>
   reload: () => Promise<unknown>
 }
 
@@ -29,12 +28,13 @@ const versionLabel = (v: VersionSummary) => {
     ? `regenerated from v${v.based_on} with feedback: “${v.feedback.slice(0, 60)}${v.feedback.length > 60 ? '…' : ''}”`
     : v.origin === 'human'
       ? `edited from v${v.based_on ?? '-'}`
-      : 'initial agent run'
+      : v.version_no === 1
+        ? 'initial agent run'
+        : 'agent re-run (no feedback)'
   return `v${v.version_no} · ${kind} · ${v.created_at.replace('T', ' ')} · ${why}`
 }
 
 export default function SectionWorkspace({ memoId, section, filing, ticker, canRun, editable, running, onRun, reload }: Props) {
-  const user = useSession()
   const st = section.state
   const versions = section.versions
   const [viewingNo, setViewingNo] = useState<number | null>(st.current_version)
@@ -83,7 +83,7 @@ export default function SectionWorkspace({ memoId, section, filing, ticker, canR
 
   const regenerate = () =>
     act(async () => {
-      await onRun({ analyst_email: user.email, feedback, quotes, base_version: viewingNo })
+      await onRun({ feedback, quotes, base_version: viewingNo })
       setFeedback('')
       setQuotes([])
     })
@@ -124,7 +124,7 @@ export default function SectionWorkspace({ memoId, section, filing, ticker, canR
         {versions.length === 0 ? (
           <div className="notice">
             Not drafted yet.{' '}
-            <button className="primary" disabled={!canRun || running} onClick={() => act(() => onRun({ analyst_email: user.email }))}>
+            <button className="primary" disabled={!canRun || running} onClick={() => act(() => onRun({}))}>
               {running ? 'Drafting...' : 'Generate AI draft'}
             </button>
           </div>
@@ -147,7 +147,7 @@ export default function SectionWorkspace({ memoId, section, filing, ticker, canR
               {viewingNo === st.approved_version && <span className="ai-badge ok">APPROVED</span>}
               {viewingNo === st.saved_version && <span className="ai-badge saved">IN MEMO</span>}
               {!isCurrent && editable && (
-                <button onClick={() => act(() => aiApi.setCurrent(memoId, section.section_type, user.email, viewingNo!))}>
+                <button onClick={() => act(() => aiApi.setCurrent(memoId, section.section_type, viewingNo!))}>
                   Make v{viewingNo} the working version
                 </button>
               )}
@@ -177,7 +177,7 @@ export default function SectionWorkspace({ memoId, section, filing, ticker, canR
                     <div className="toolbar" style={{ marginTop: 4 }}>
                       <button
                         className="primary"
-                        onClick={() => act(async () => { await aiApi.edit(memoId, section.section_type, user.email, editText, viewingNo); setEditing(false) })}
+                        onClick={() => act(async () => { await aiApi.edit(memoId, section.section_type, editText, viewingNo); setEditing(false) })}
                       >
                         Save as new version
                       </button>
@@ -194,12 +194,12 @@ export default function SectionWorkspace({ memoId, section, filing, ticker, canR
                     <button
                       className="primary"
                       disabled={!editable || !version.text || viewingNo === st.approved_version}
-                      onClick={() => act(() => aiApi.approve(memoId, section.section_type, user.email, version.version_no))}
+                      onClick={() => act(() => aiApi.approve(memoId, section.section_type, version.version_no))}
                     >
                       Approve v{version.version_no}
                     </button>
                     <button disabled={!editable} onClick={() => { setEditText(version.text); setEditing(true) }}>Edit text</button>
-                    <button disabled={!canRun || running} onClick={() => act(() => onRun({ analyst_email: user.email }))}>
+                    <button disabled={!canRun || running} onClick={() => act(() => onRun({}))}>
                       {running ? 'Running agent...' : 'Re-run agent (no feedback)'}
                     </button>
                   </div>

@@ -1,4 +1,8 @@
 // Client for the AI Credit Memo Draft service (FastAPI, proxied at /ai -> http://localhost:8200).
+// Sends the signed-in user's token; the service takes identity and roles only from it.
+
+import { authHeaders } from '../api'
+import { sessionExpired } from '../auth'
 
 export type Citation = {
   n: number
@@ -89,14 +93,21 @@ export type Draft = {
   }
   borrower: { borrower_id: string; name: string; ticker: string; sector: string; restricted: boolean }
   filing: { filing_id: number; accession_number: string; filing_date: string; ticker: string | null } | null
-  access: { restricted: boolean; in_portfolio: boolean; is_preparer: boolean }
+  access: {
+    restricted: boolean
+    in_portfolio: boolean
+    is_preparer: boolean
+    can_draft: boolean
+    viewer: { email: string; name: string; roles: string[] }
+  }
   sections: DraftSection[]
 }
 
 export type DraftEvent = { event_id: number; section_type: string; actor: string; action: string; detail: string; at: string }
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, { ...init, headers: { 'Content-Type': 'application/json' } })
+  const res = await fetch(path, { ...init, headers: { 'Content-Type': 'application/json', ...authHeaders() } })
+  if (res.status === 401) sessionExpired()
   if (!res.ok) {
     let detail: unknown = res.statusText
     try {
@@ -115,18 +126,18 @@ const sec = (memoId: string, type: string) => `/ai/drafts/${memoId}/sections/${t
 
 export const aiApi = {
   health: () => call<{ env: string; model: string; llm_configured: boolean }>('/ai/health'),
-  draft: (memoId: string, analyst: string) => call<Draft>(`/ai/drafts/${memoId}?analyst=${encodeURIComponent(analyst)}`),
+  draft: (memoId: string) => call<Draft>(`/ai/drafts/${memoId}`),
   version: (memoId: string, type: string, no: number) => call<Version>(`${sec(memoId, type)}/versions/${no}`),
-  generate: (memoId: string, type: string, body: { analyst_email: string; feedback?: string; quotes?: QuoteRef[]; base_version?: number | null }) =>
+  generate: (memoId: string, type: string, body: { feedback?: string; quotes?: QuoteRef[]; base_version?: number | null }) =>
     post<Version>(`${sec(memoId, type)}/generate`, body),
-  edit: (memoId: string, type: string, analyst_email: string, text: string, base_version: number | null) =>
-    post<Version>(`${sec(memoId, type)}/edit`, { analyst_email, text, base_version }),
-  setCurrent: (memoId: string, type: string, analyst_email: string, version_no: number) =>
-    post<SectionState>(`${sec(memoId, type)}/current`, { analyst_email, version_no }),
-  approve: (memoId: string, type: string, analyst_email: string, version_no: number) =>
-    post<SectionState>(`${sec(memoId, type)}/approve`, { analyst_email, version_no }),
-  markSaved: (memoId: string, type: string, analyst_email: string, version_no: number) =>
-    post<SectionState>(`${sec(memoId, type)}/saved`, { analyst_email, version_no }),
+  edit: (memoId: string, type: string, text: string, base_version: number | null) =>
+    post<Version>(`${sec(memoId, type)}/edit`, { text, base_version }),
+  setCurrent: (memoId: string, type: string, version_no: number) =>
+    post<SectionState>(`${sec(memoId, type)}/current`, { version_no }),
+  approve: (memoId: string, type: string, version_no: number) =>
+    post<SectionState>(`${sec(memoId, type)}/approve`, { version_no }),
+  markSaved: (memoId: string, type: string, version_no: number) =>
+    post<SectionState>(`${sec(memoId, type)}/saved`, { version_no }),
   events: (memoId: string) => call<DraftEvent[]>(`/ai/drafts/${memoId}/events`),
 }
 

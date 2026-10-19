@@ -15,9 +15,12 @@ function MemoPicker() {
   const user = useSession()
   const [memos, setMemos] = useState<Memo[]>([])
   useEffect(() => {
-    api.memos(user.role === 'analyst' ? user.email : undefined).then(setMemos)
+    api.memos(user.role === 'analyst').then(setMemos)
   }, [user])
-  const open = memos.filter((m) => m.status === 'Draft' || m.status === 'Returned')
+  // Analysts draft their own open memos; officers and compliance review AI provenance.
+  const reviewer = user.role !== 'analyst'
+  const visible = reviewer ? ['Draft', 'Returned', 'Submitted'] : ['Draft', 'Returned']
+  const open = memos.filter((m) => visible.includes(m.status))
   return (
     <>
       <h2>AI Credit Memo Draft</h2>
@@ -40,11 +43,11 @@ function MemoPicker() {
               <td>{m.review_year}</td>
               <td>{m.analyst_email}</td>
               <td><span className={`status status-${m.status}`}>{m.status}</span></td>
-              <td><a href={`#/ai-draft/${m.memo_id}`}>Open AI draft &raquo;</a></td>
+              <td><a href={`#/ai-draft/${m.memo_id}`}>{reviewer ? 'Review AI drafts' : 'Open AI draft'} &raquo;</a></td>
             </tr>
           ))}
           {open.length === 0 && (
-            <tr><td colSpan={7} className="muted">No Draft or Returned memos. Create one from the Borrowers tab.</td></tr>
+            <tr><td colSpan={7} className="muted">{reviewer ? 'No memos to review.' : 'No Draft or Returned memos. Create one from the Borrowers tab.'}</td></tr>
           )}
         </tbody>
       </table>
@@ -63,7 +66,6 @@ export function sectionBadge(s: DraftSection, running: boolean) {
 }
 
 function Workspace({ memoId, initialSection }: { memoId: string; initialSection: string | null }) {
-  const user = useSession()
   const [draft, setDraft] = useState<Draft | null>(null)
   const [selected, setSelected] = useState(initialSection ?? 'business_overview')
   const [running, setRunning] = useState<Set<string>>(new Set())
@@ -72,8 +74,8 @@ function Workspace({ memoId, initialSection }: { memoId: string; initialSection:
   const [model, setModel] = useState('')
 
   const reload = useCallback(
-    () => aiApi.draft(memoId, user.email).then(setDraft).catch((e) => setError(String(e))),
-    [memoId, user.email],
+    () => aiApi.draft(memoId).then(setDraft).catch((e) => setError(String(e))),
+    [memoId],
   )
   useEffect(() => {
     reload()
@@ -85,8 +87,8 @@ function Workspace({ memoId, initialSection }: { memoId: string; initialSection:
 
   const { memo, borrower, filing, access } = draft
   const editable = (memo.status === 'Draft' || memo.status === 'Returned') && access.is_preparer
-  const blocked = access.restricted || !access.in_portfolio
-  const canRun = editable && !blocked && !!filing
+  const blocked = access.is_preparer && (access.restricted || !access.in_portfolio)
+  const canRun = access.can_draft && !!filing
 
   const runSection = async (type: string, body: Parameters<typeof aiApi.generate>[2]) => {
     setRunning((r) => new Set(r).add(type))
@@ -110,7 +112,7 @@ function Workspace({ memoId, initialSection }: { memoId: string; initialSection:
     for (const [i, s] of targets.entries()) {
       setProgress(`Agent run ${i + 1} of ${targets.length}: ${s.title}...`)
       try {
-        await runSection(s.section_type, { analyst_email: user.email })
+        await runSection(s.section_type, {})
       } catch (e) {
         setError(`${s.title}: ${String(e)}`)
       }
@@ -126,8 +128,8 @@ function Workspace({ memoId, initialSection }: { memoId: string; initialSection:
       const body = memoBody(v, borrower.ticker)
       if (s.legacy_body.trim() && !confirm(`"${s.title}" already has text in the credit memo. Replace it with approved AI draft v${v.version_no}?`)) continue
       try {
-        await api.saveSection(memoId, s.section_type, body, user.email) // the portal writes its own memo
-        await aiApi.markSaved(memoId, s.section_type, user.email, v.version_no)
+        await api.saveSection(memoId, s.section_type, body) // the portal writes its own memo
+        await aiApi.markSaved(memoId, s.section_type, v.version_no)
       } catch (e) {
         setError(`${s.title}: ${String(e)}`)
       }
@@ -183,7 +185,13 @@ function Workspace({ memoId, initialSection }: { memoId: string; initialSection:
         <div className="col">
           <fieldset>
             <legend>Access Check (Compliance)</legend>
-            {blocked ? (
+            {!access.is_preparer ? (
+              <div>
+                <span className="ai-badge run">READ-ONLY REVIEW</span> You are viewing{' '}
+                <b>{memo.analyst_email}</b>&rsquo;s AI drafts with full provenance (citations, versions, reasoning,
+                history). Drafting and approval of sections are reserved for the preparing analyst.
+              </div>
+            ) : blocked ? (
               <div className="alert alert-red" style={{ margin: 0 }}>
                 <b>AI drafting blocked.</b>{' '}
                 {access.restricted
@@ -196,7 +204,6 @@ function Workspace({ memoId, initialSection }: { memoId: string; initialSection:
                 List. Checked live against the Credit Portal on every AI run.
               </div>
             )}
-            {!access.is_preparer && <div className="muted small" style={{ marginTop: 4 }}>Read-only: you are not the preparer of this memo.</div>}
             {access.is_preparer && !editable && <div className="muted small" style={{ marginTop: 4 }}>Read-only: memo is {memo.status}.</div>}
           </fieldset>
         </div>

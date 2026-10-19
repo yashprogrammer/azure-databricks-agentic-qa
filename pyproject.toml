@@ -16,6 +16,7 @@ dependencies = [
     "pydantic>=2.9.0",
     "fastapi>=0.115.0",
     "uvicorn>=0.32.0",
+    "pyjwt[crypto]>=2.9.0",
 ]
 
 [project.optional-dependencies]

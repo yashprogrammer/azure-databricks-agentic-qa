@@ -28,6 +28,11 @@ One new tab in the legacy Credit Portal. Every other tab, the layout and the the
   sections are written into the legacy memo by the portal itself.
 - **Compliance guard:** restricted borrowers and borrowers outside the analyst's portfolio
   are refused before any model call, and the refusal is logged.
+- **Single sign-on, enforced server-side:** both APIs take the user only from a validated
+  bearer token (no user picker, no user fields in requests). The AI service forwards the
+  user's token to the Credit Portal API, so every portfolio and restricted-list check applies
+  to the real user. Preparing analysts draft their own memos; Credit Officers and Compliance
+  get a read-only review of the AI provenance.
 
 ## Run the integrated system locally
 
@@ -50,8 +55,12 @@ uv run uvicorn policypilot.memo.api:app --port 8200
 cd legacy/frontend && npm install && npm run dev
 ```
 
-Open http://localhost:5173 → **AI Credit Memo Draft** → open `CM-2026-0101` (Apple) →
-**Draft all 6 sections**. The first run on a filing also indexes it (about 20 seconds).
+Open http://localhost:5173 and sign in through the development identity provider (it stands in
+for Microsoft Entra ID locally) as `m.lee@contoso.example`, password `contoso-dev`. Then go to
+**AI Credit Memo Draft** → open `CM-2026-0101` (Apple) → **Draft all 6 sections**. The first
+run on a filing also indexes it (about 20 seconds). Sign in as `p.raman@contoso.example`
+(Credit Officer) to see the read-only review. All test accounts are listed in the `legacy`
+branch README.
 
 Tests: `uv run pytest` (root, includes the memo agent and API) and `cd legacy/backend && uv run pytest`.
 

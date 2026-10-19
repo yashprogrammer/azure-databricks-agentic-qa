@@ -170,7 +170,7 @@ def build_section_graph(llm: Any, index: FilingIndex, legacy: LegacyPortal, docu
                 "grounded": False,
                 "refusal_reason": "restricted_borrower",
             }
-        if bid not in legacy.portfolio(state["analyst_email"]):
+        if bid not in legacy.portfolio():  # the verified user's portfolio
             return {
                 "guard": {
                     "allowed": False,
