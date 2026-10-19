@@ -5,6 +5,7 @@ export type Citation = {
   source: string
   quote: string
   verified: boolean
+  match?: 'exact' | 'near' // near = tiny copy differences, e.g. a dropped letter
   filing_id: number
   start?: number
   end?: number

@@ -238,7 +238,10 @@ export default function SectionWorkspace({ memoId, section, filing, ticker, canR
                                 <br />
                                 {c.verified ? `lines ${c.line_start}–${c.line_end} (source ${c.source})` : `cited ${c.source}`}
                               </td>
-                              <td>{c.verified ? <span className="ai-badge ok">VERIFIED</span> : <span className="ai-badge warn">NOT FOUND</span>}</td>
+                              <td>
+                                {c.verified ? <span className="ai-badge ok">VERIFIED</span> : <span className="ai-badge warn">NOT FOUND</span>}
+                                {c.match === 'near' && <div className="small muted" title="Matches the filing except for tiny copy differences (e.g. a dropped letter or hyphen variant)">near-exact</div>}
+                              </td>
                               <td style={{ whiteSpace: 'nowrap' }}>
                                 {c.verified && (
                                   <>

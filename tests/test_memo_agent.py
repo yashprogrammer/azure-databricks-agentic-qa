@@ -148,3 +148,48 @@ def test_feedback_quote_is_pinned_into_sources_and_prompt():
     draft_prompt = llm.prompts[-1]
     assert "Analyst feedback to address" in draft_prompt and "fixed-rate notes" in draft_prompt
     assert "notes maturities" in out["trace"]["queries"]
+
+
+TABLE_DOC = "Net sales by region\nU.S.\n$\n151,790\n$\n140,000\nChina\n64,377\n70,000\n"
+RISK_DOC = (
+    "Defending against litigation or responding to government investigations can be "
+    "expensive, time-consuming and disruptive to the Company's operations."
+)
+
+
+def test_quote_matches_table_cells_split_across_lines():
+    hit = find_quote(TABLE_DOC, 0, len(TABLE_DOC), "U.S. $151,790")
+    assert hit is not None and hit[2] == "exact"
+    assert TABLE_DOC[hit[0] : hit[1]] == "U.S.\n$\n151,790"
+
+
+def test_near_exact_copy_is_accepted_and_labelled():
+    # non-breaking hyphen + one stray letter: a faithful copy, not a paraphrase
+    quote = "responding to governments investigations can be expensive, time‑consuming"
+    hit = find_quote(RISK_DOC, 0, len(RISK_DOC), quote)
+    assert hit is not None and hit[2] == "near"
+    assert find_quote(RISK_DOC, 0, len(RISK_DOC), quote, allow_near=False) is None
+
+
+def test_stitched_quote_is_rejected():
+    # cells taken from different columns of a table are not a verbatim quote
+    assert find_quote(TABLE_DOC, 0, len(TABLE_DOC), "U.S. $151,790 China 70,000") is None
+
+
+class MarkerlessThenFixedLLM(FakeLLM):
+    """First answer forgets the [n] markers; the repair attempt adds them back."""
+
+    def complete(self, system, messages, max_tokens=1024):
+        if messages[-1]["content"].startswith("Your draft has no [n] citation markers"):
+            out = json.loads(messages[-2]["content"])
+            out["draft"] = out["draft"].rstrip(".") + " [1]."
+            return json.dumps(out)
+        out = json.loads(super().complete(system, messages, max_tokens))
+        out["draft"] = out["draft"].replace(" [1]", "")
+        return json.dumps(out)
+
+
+def test_missing_citation_markers_are_repaired_once():
+    out = _run(MarkerlessThenFixedLLM("had $8.0 billion of commercial paper outstanding"))
+    assert out["grounded"] is True
+    assert out["trace"]["llm_calls"] == 2

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 import time
+from difflib import SequenceMatcher
 from typing import Any, TypedDict
 
 from langgraph.graph import END, StateGraph
@@ -72,26 +73,71 @@ class SectionState(TypedDict, total=False):
 # ------------------------------------------------------------------ quote verification
 
 # Same-length character normalisation, so offsets in the normalised text match the original.
-_NORMALISE = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"', "–": "-", "—": "-", " ": " "})
+_NORMALISE = str.maketrans(
+    {
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201c": '"',
+        "\u201d": '"',  # curly quotes
+        "\u2010": "-",
+        "\u2011": "-",
+        "\u2012": "-",
+        "\u2013": "-",
+        "\u2014": "-",
+        "\u2212": "-",
+    }
+)
+NEAR_MIN_MATCHED = 0.92  # share of the quote's characters found, in order, in the filing...
+NEAR_MAX_SPAN = 1.10  # ...within a window at most this much longer than the quote itself
 
 
-def find_quote(document: str, start: int, end: int, quote: str) -> tuple[int, int] | None:
-    """Locate `quote` inside document[start:end], tolerant to whitespace, case, curly quotes
-    and dashes. Returns absolute (start, end) offsets in `document`, or None."""
-    segment = document[start:end].translate(_NORMALISE)
-    quote = quote.translate(_NORMALISE).strip().strip('"').strip()
-    parts = [p for p in re.split(r"\.\.\.|…", quote) if p.strip()] or [quote]
-    for part in sorted(parts, key=len, reverse=True):
-        tokens = part.split()
-        if len(tokens) < 3 and len(parts) > 1:
-            continue
-        if not tokens:
-            continue
-        pattern = r"\s+".join(re.escape(t) for t in tokens)
-        m = re.search(pattern, segment, flags=re.IGNORECASE)
-        if m:
-            return start + m.start(), start + m.end()
+def _compact(text: str) -> tuple[str, list[int]]:
+    """Lower-case text with every whitespace character removed, plus a map back to the
+    original offsets. 10-K tables put cells on separate lines ("$" / "151,790"), so the
+    model's "$151,790" only matches once whitespace is ignored entirely."""
+    chars, index = [], []
+    for i, ch in enumerate(text.translate(_NORMALISE)):
+        if not ch.isspace():
+            chars.append(ch.lower())
+            index.append(i)
+    return "".join(chars), index
+
+
+def _match(segment: str, quote: str, allow_near: bool) -> tuple[int, int, str] | None:
+    seg, index = _compact(segment)
+    parts = [p for p in re.split(r"\.\.\.|\u2026", quote) if len(p.split()) >= 3] or [quote]
+    q, _ = _compact(max(parts, key=len))  # with an ellipsis, verify the longest fragment
+    if len(q) < 12:
+        return None
+    pos = seg.find(q)
+    if pos >= 0:
+        return index[pos], index[pos + len(q) - 1] + 1, "exact"
+    if not allow_near:
+        return None
+    blocks = [
+        b
+        for b in SequenceMatcher(None, q, seg, autojunk=False).get_matching_blocks()
+        if b.size >= 3
+    ]
+    if not blocks:
+        return None
+    matched = sum(b.size for b in blocks)
+    first, last = blocks[0].b, blocks[-1].b + blocks[-1].size
+    if matched >= NEAR_MIN_MATCHED * len(q) and (last - first) <= NEAR_MAX_SPAN * len(q):
+        return index[first], index[last - 1] + 1, "near"
     return None
+
+
+def find_quote(
+    document: str, start: int, end: int, quote: str, allow_near: bool = True
+) -> tuple[int, int, str] | None:
+    """Locate `quote` in document[start:end]. Returns absolute (start, end, kind) where kind is
+    "exact" (identical apart from whitespace, case, curly quotes and dash variants) or "near"
+    (tiny copy differences, e.g. a dropped letter), or None if the quote isn't in the passage.
+    Stitched-together or paraphrased quotes fail the span check and are rejected."""
+    quote = quote.strip().strip('"').strip()
+    hit = _match(document[start:end], quote, allow_near)
+    return (start + hit[0], start + hit[1], hit[2]) if hit else None
 
 
 def _line_of(document: str, offset: int) -> int:
@@ -242,6 +288,25 @@ def build_section_graph(llm: Any, index: FilingIndex, legacy: LegacyPortal, docu
                     "citations": [],
                     "reasoning": "The model did not return a valid structured answer.",
                 }
+        if parsed.get("citations") and not CITATION_RE.search(str(parsed.get("draft") or "")):
+            # Quotes came back but the prose has no [n] markers, so nothing ties a sentence to
+            # its evidence. One repair attempt; if it still has none, verify() flags it.
+            messages += [
+                {"role": "assistant", "content": raw},
+                {
+                    "role": "user",
+                    "content": "Your draft has no [n] citation markers. Return the same "
+                    "JSON, with every factual sentence in the draft ending in the matching [n].",
+                },
+            ]
+            retry = llm.complete(DRAFT_PROMPT, messages, max_tokens=4000)
+            calls += 1
+            try:
+                repaired = _parse_json(retry)
+                if CITATION_RE.search(str(repaired.get("draft") or "")):
+                    parsed, raw = repaired, retry
+            except Exception:
+                pass
         return {
             "draft": str(parsed.get("draft") or "").strip(),
             "citations": parsed.get("citations") or [],
@@ -261,13 +326,18 @@ def build_section_graph(llm: Any, index: FilingIndex, legacy: LegacyPortal, docu
                 continue
             src = by_id.get(str(c.get("source", "")).strip())
             quote = str(c.get("quote") or "")
-            hit = find_quote(document, src["start"], src["end"], quote) if src else None
-            if not hit:  # the model may have cited the wrong passage: check the others
-                for other in by_id.values():
-                    hit = find_quote(document, other["start"], other["end"], quote)
+            # Prefer an exact match in the cited passage, then anywhere in the run's sources (the
+            # model sometimes cites the neighbouring passage), and only then a near-exact match.
+            candidates = ([src] if src else []) + [o for o in by_id.values() if o is not src]
+            hit = None
+            for allow_near in (False, True):
+                for cand in candidates:
+                    hit = find_quote(document, cand["start"], cand["end"], quote, allow_near)
                     if hit:
-                        src = other
+                        src = cand
                         break
+                if hit:
+                    break
             entry = {
                 "n": n,
                 "source": src["id"] if src else c.get("source"),
@@ -277,6 +347,7 @@ def build_section_graph(llm: Any, index: FilingIndex, legacy: LegacyPortal, docu
             }
             if hit:
                 entry.update(
+                    match=hit[2],
                     start=hit[0],
                     end=hit[1],
                     line_start=_line_of(document, hit[0]),
