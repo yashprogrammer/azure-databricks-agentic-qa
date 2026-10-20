@@ -40,24 +40,34 @@ npm install
 npm run dev                                  # http://localhost:5173
 ```
 
-## Sign-in and permissions
+## Sign-in, permissions and user administration
 
-Users sign in through single sign-on; the APIs take the user **only** from a validated
-bearer token (RS256 JWT: signature, issuer, audience and expiry are checked) and enforce
-roles and ownership server-side (`legacy/backend/app/auth.py`).
+- **Who you are** comes only from a validated bearer token (RS256 JWT: signature, issuer,
+  audience and expiry are checked). Locally a **development identity provider**
+  (`app/dev_idp.py`, mounted at `/dev-idp`) plays the bank's employee directory and stands in for
+  Microsoft Entra ID. Its tokens carry identity only, not roles.
+- **What you may do** is the portal's own decision: the `analysts` table holds each user's
+  portal role and whether their access is active (`app/auth.py`). It is read on every request,
+  so changes apply immediately.
+- **Portal Administrators** manage that table in the **Administration** tab: grant access to a
+  directory employee, change roles, deactivate or reactivate users (`app/admin.py`). Changes are
+  written to the activity log; an administrator cannot change or deactivate their own account.
 
-Locally, a **development identity provider** (`app/dev_idp.py`, mounted at `/dev-idp`) stands in
-for Microsoft Entra ID and issues tokens with the same claims Entra ID uses
-(`preferred_username`, `name`, `roles`). Fictional test accounts, all with the development
-password `contoso-dev` (override with `DEV_IDP_PASSWORD`):
+Fictional employees in the development directory, all with the development password
+`contoso-dev` (override with `DEV_IDP_PASSWORD`):
 
-| User ID | Person | App role | Can |
-| --- | --- | --- | --- |
-| `m.lee@contoso.example` | Marcus Lee | `Credit.Analyst` | Prepare memos for borrowers in his portfolio |
-| `a.ruiz@contoso.example` | Ana Ruiz | `Credit.Analyst` | Same, for her portfolio |
-| `d.cho@contoso.example` | Daniel Cho | `Credit.Analyst` | Same, for his portfolio |
-| `p.raman@contoso.example` | Priya Raman | `Credit.Officer` | Approve or return submitted memos |
-| `a.karim@contoso.example` | Aisha Karim | `Compliance.Reviewer` | Read-only oversight |
+| User ID | Person | Portal role (seed) |
+| --- | --- | --- |
+| `m.lee@contoso.example` | Marcus Lee | Credit Analyst |
+| `a.ruiz@contoso.example` | Ana Ruiz | Credit Analyst |
+| `d.cho@contoso.example` | Daniel Cho | Credit Analyst |
+| `p.raman@contoso.example` | Priya Raman | Credit Officer: approves or returns memos |
+| `a.karim@contoso.example` | Aisha Karim | Compliance Reviewer: read-only |
+| `e.novak@contoso.example` | Elena Novak | **Portal Administrator** |
+| `g.kim@contoso.example` | Grace Kim | *no access*: a new joiner to grant access to |
+| `j.blake@contoso.example`, `s.okafor@contoso.example`, `t.fischer@contoso.example` | Jordan Blake, Sam Okafor, Tom Fischer | *no access* |
+
+Employees without portal access can sign in but are told their account is not set up.
 
 On Azure, turn the development IdP off and point the API at Entra ID:
 

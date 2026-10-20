@@ -30,6 +30,7 @@ ANALYSTS = [
     ("d.cho@contoso.example", "Daniel Cho", "Credit Analyst", "analyst"),
     ("p.raman@contoso.example", "Priya Raman", "Chief Credit Officer", "credit_officer"),
     ("a.karim@contoso.example", "Aisha Karim", "Compliance Officer", "compliance"),
+    ("e.novak@contoso.example", "Elena Novak", "Credit Portal Application Owner", "admin"),
 ]
 
 # borrower_id, ticker, name, sector, relationship manager, exposure ($M), rating, next review
@@ -89,7 +90,11 @@ def seed(reset: bool = False) -> None:
     now = datetime.now()
     with SessionLocal() as s:
         if s.get(Analyst, ANALYSTS[0][0]):
-            print("Database already seeded (use --reset to recreate).")
+            missing = [a for a in ANALYSTS if not s.get(Analyst, a[0])]
+            s.add_all(Analyst(email=e, name=n, title=t, role=r) for e, n, t, r in missing)
+            s.commit()
+            print(f"Database already seeded; added {len(missing)} missing user(s). "
+                  "Use --reset to recreate.")
             return
         s.add_all(Analyst(email=e, name=n, title=t, role=r) for e, n, t, r in ANALYSTS)
         s.add_all(

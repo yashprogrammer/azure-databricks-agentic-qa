@@ -34,7 +34,8 @@ export default function App() {
 
   if (!signedIn) return <SignIn onSignedIn={() => setSignedIn(true)} />
 
-  const active = TABS.find((t) => t.key === route.path[0]) ?? TABS[0]
+  const tabs = TABS.filter((t) => !t.roles || (user !== null && t.roles.includes(user.role)))
+  const active = tabs.find((t) => t.key === route.path[0]) ?? tabs[0]
 
   return (
     <div className="frame">
@@ -70,7 +71,7 @@ export default function App() {
       </div>
 
       <div className="tabs">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <a key={t.key} href={`#/${t.key}`} className={t.key === active.key ? 'active' : ''}>
             {t.label}
           </a>

@@ -145,4 +145,34 @@ export const api = {
   restricted: () => request<RestrictedRow[]>('/api/restricted'),
 }
 
+export type PortalUser = {
+  email: string
+  name: string
+  title: string
+  role: string
+  role_label: string
+  active: boolean
+  portfolio_size: number
+  open_memos: number
+}
+
+export type DirectoryEntry = {
+  email: string
+  name: string
+  job_title: string
+  has_access: boolean
+  role: string | null
+  active: boolean | null
+}
+
+export const adminApi = {
+  roles: () => request<{ role: string; label: string }[]>('/api/admin/roles'),
+  users: () => request<PortalUser[]>('/api/admin/users'),
+  directory: (q: string) => request<DirectoryEntry[]>(`/api/admin/directory${qs({ q })}`),
+  grant: (email: string, role: string) =>
+    request<PortalUser>('/api/admin/users', { method: 'POST', body: JSON.stringify({ email, role }) }),
+  update: (email: string, change: { role?: string; active?: boolean }) =>
+    request<PortalUser>(`/api/admin/users/${encodeURIComponent(email)}`, { method: 'PATCH', body: JSON.stringify(change) }),
+}
+
 export const fmtMoney = (musd: number) => `$${musd.toLocaleString('en-US', { minimumFractionDigits: 1 })}M`
