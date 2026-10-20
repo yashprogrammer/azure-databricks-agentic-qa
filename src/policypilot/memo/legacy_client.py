@@ -18,6 +18,7 @@ LEGACY_API_URL = os.environ.get("LEGACY_API_URL", "http://localhost:8100")
 
 
 class LegacyPortal(Protocol):
+    def me(self) -> dict: ...  # the signed-in user's portal account: role, active
     def memo(self, memo_id: str) -> dict: ...
     def borrower(self, borrower_id: str) -> dict: ...
     def filing_text(self, filing_id: int) -> str: ...
@@ -35,6 +36,9 @@ class LegacyApiClient:
         resp = self._http.get(f"{self._base}{path}", params=params or None, timeout=30)
         resp.raise_for_status()
         return resp.json()
+
+    def me(self) -> dict:
+        return self._get("/api/me")
 
     def memo(self, memo_id: str) -> dict:
         return self._get(f"/api/memos/{memo_id}")

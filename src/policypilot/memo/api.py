@@ -16,7 +16,7 @@ portfolio and restricted-list checks apply to the real user:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import cached_property
 
 import jwt
@@ -98,14 +98,22 @@ _bearer = HTTPBearer(auto_error=False)
 
 
 def current_user(creds: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> CurrentUser:
+    """Identity from the validated token; role and active status from the Credit Portal."""
     if not creds:
         raise HTTPException(401, "Sign-in required", headers={"WWW-Authenticate": "Bearer"})
     try:
-        return services.validator.validate(creds.credentials)
+        identity = services.validator.validate(creds.credentials)
     except jwt.PyJWTError as e:
         raise HTTPException(
             401, f"Invalid or expired token: {e}", headers={"WWW-Authenticate": "Bearer"}
         ) from e
+    try:
+        account = services.legacy_for(identity).me()
+    except requests.HTTPError as e:  # 403: no portal access, or access deactivated
+        code = e.response.status_code if e.response is not None else 502
+        detail = e.response.text if e.response is not None else str(e)
+        raise HTTPException(code if code in (401, 403) else 502, f"Credit Portal: {detail}") from e
+    return replace(identity, roles=frozenset(account.get("roles") or []))
 
 
 @dataclass

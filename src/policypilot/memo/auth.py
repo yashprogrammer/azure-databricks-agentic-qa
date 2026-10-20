@@ -1,9 +1,10 @@
 """Authentication for the AI Credit Memo Draft service.
 
 The portal forwards the signed-in user's bearer token; this service validates it itself
-(signature via the issuer's JWKS, issuer, audience, expiry) and takes the user only from it.
-It accepts the same token as the Credit Portal API, so it can forward that token when it reads
-the legacy system, and the legacy system applies the same user's permissions.
+(signature via the issuer's JWKS, issuer, audience, expiry) and takes the user's IDENTITY only
+from it. The token carries no roles: the Credit Portal owns users and roles, so the service asks
+the portal (GET /api/me, with the same token) for the user's role and whether their access is
+active. The legacy system stays the single source of truth for who may do what.
 
 Locally the issuer is the Credit Portal's development IdP; on Azure, Microsoft Entra ID:
 
@@ -30,7 +31,7 @@ COMPLIANCE = "Compliance.Reviewer"
 class CurrentUser:
     email: str
     name: str
-    roles: frozenset[str]
+    roles: frozenset[str]  # filled from the Credit Portal, not from the token
     token: str  # forwarded to the legacy API so it applies this user's permissions
 
     def has(self, *roles: str) -> bool:
@@ -61,8 +62,5 @@ class TokenValidator:
         if not email:
             raise jwt.InvalidTokenError("token has no user name")
         return CurrentUser(
-            email=email,
-            name=str(claims.get("name") or email),
-            roles=frozenset(claims.get("roles") or []),
-            token=token,
+            email=email, name=str(claims.get("name") or email), roles=frozenset(), token=token
         )

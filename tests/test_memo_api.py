@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
+import requests
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 
@@ -17,14 +18,14 @@ ISSUER, AUDIENCE = "https://idp.test", "api://contoso-credit-portal"
 KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
 
-def token(email: str, roles: list[str], key=KEY, **overrides) -> dict:
+def token(email: str, key=KEY, **overrides) -> dict:
+    """Identity-only token, like the Credit Portal's IdP issues: roles come from the portal."""
     now = datetime.now(UTC)
     claims = {
         "iss": ISSUER,
         "aud": AUDIENCE,
         "preferred_username": email,
         "name": email,
-        "roles": roles,
         "iat": now,
         "exp": now + timedelta(hours=1),
         **overrides,
@@ -32,15 +33,38 @@ def token(email: str, roles: list[str], key=KEY, **overrides) -> dict:
     return {"Authorization": f"Bearer {jwt.encode(claims, key, algorithm='RS256')}"}
 
 
-MARCUS = token(ANALYST, ["Credit.Analyst"])
-ANA = token(OTHER_ANALYST, ["Credit.Analyst"])
-PRIYA = token(OFFICER, ["Credit.Officer"])
+MARCUS = token(ANALYST)
+ANA = token(OTHER_ANALYST)
+PRIYA = token(OFFICER)
+PERMISSIONS = {
+    "analyst": "Credit.Analyst",
+    "credit_officer": "Credit.Officer",
+    "compliance": "Compliance.Reviewer",
+}
+
+
+def http_error(status: int) -> requests.HTTPError:
+    response = requests.Response()
+    response.status_code = status
+    response._content = b'{"detail": "denied"}'
+    return requests.HTTPError(response=response)
 
 
 class FakePortal:
+    """Stands in for the Credit Portal API, answering as whichever user's token it was given."""
+
     def __init__(self):
         self.status = "Draft"
         self.restricted = set()
+        self.accounts = {ANALYST: "analyst", OTHER_ANALYST: "analyst", OFFICER: "credit_officer"}
+        self.deactivated: set[str] = set()
+        self.as_user = None
+
+    def me(self):
+        if self.as_user not in self.accounts or self.as_user in self.deactivated:
+            raise http_error(403)
+        role = self.accounts[self.as_user]
+        return {"email": self.as_user, "role": role, "roles": [PERMISSIONS[role]]}
 
     def memo(self, memo_id):
         return {
@@ -90,7 +114,12 @@ def client(tmp_path, monkeypatch):
         index=FakeIndex(),
         llm=FakeLLM("had $8.0 billion of commercial paper outstanding"),
     )
-    svc.legacy_for = lambda user: portal
+
+    def legacy_for(user):
+        portal.as_user = user.email
+        return portal
+
+    svc.legacy_for = legacy_for
     monkeypatch.setattr(memo_api, "services", svc)
     monkeypatch.setattr(memo_api.Services, "model_label", property(lambda self: "fake-model"))
     with TestClient(memo_api.app) as c:
@@ -137,13 +166,9 @@ def test_full_human_in_the_loop_flow(client):
 
 def test_requests_without_a_valid_token_are_rejected(client):
     assert client.get("/ai/drafts/CM-1").status_code == 401
-    forged = token(
-        ANALYST,
-        ["Credit.Analyst"],
-        key=rsa.generate_private_key(public_exponent=65537, key_size=2048),
-    )
+    forged = token(ANALYST, key=rsa.generate_private_key(public_exponent=65537, key_size=2048))
     assert client.post(f"{URL}/generate", json={}, headers=forged).status_code == 401
-    wrong_audience = token(ANALYST, ["Credit.Analyst"], aud="api://something-else")
+    wrong_audience = token(ANALYST, aud="api://something-else")
     assert client.get("/ai/drafts/CM-1", headers=wrong_audience).status_code == 401
 
 
@@ -173,3 +198,17 @@ def test_restricted_borrower_is_refused_and_logged(client):
 def test_submitted_memo_cannot_be_drafted(client):
     client.fake_portal.status = "Submitted"
     assert client.post(f"{URL}/generate", json={}, headers=MARCUS).status_code == 409
+
+
+def test_roles_come_from_the_portal_and_apply_immediately(client):
+    assert client.post(f"{URL}/generate", json={}, headers=MARCUS).status_code == 200
+    client.fake_portal.accounts[ANALYST] = "compliance"  # an administrator changes Marcus's role
+    assert client.post(f"{URL}/generate", json={}, headers=MARCUS).status_code == 403
+    assert client.get("/ai/drafts/CM-1", headers=MARCUS).status_code == 200  # read-only now
+
+
+def test_deactivated_or_unknown_users_are_refused(client):
+    client.fake_portal.deactivated.add(ANALYST)
+    assert client.get("/ai/drafts/CM-1", headers=MARCUS).status_code == 403
+    stranger = token("g.kim@contoso.example")  # in the directory, but no portal access
+    assert client.get("/ai/drafts/CM-1", headers=stranger).status_code == 403

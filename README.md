@@ -28,11 +28,16 @@ One new tab in the legacy Credit Portal. Every other tab, the layout and the the
   sections are written into the legacy memo by the portal itself.
 - **Compliance guard:** restricted borrowers and borrowers outside the analyst's portfolio
   are refused before any model call, and the refusal is logged.
-- **Single sign-on, enforced server-side:** both APIs take the user only from a validated
-  bearer token (no user picker, no user fields in requests). The AI service forwards the
-  user's token to the Credit Portal API, so every portfolio and restricted-list check applies
-  to the real user. Preparing analysts draft their own memos; Credit Officers and Compliance
-  get a read-only review of the AI provenance.
+- **Single sign-on, enforced server-side:** both APIs take the user's identity only from a
+  validated bearer token (no user picker, no user fields in requests).
+- **The Credit Portal stays the source of truth for users and roles.** Its Administration tab
+  (Portal Administrator: `e.novak@contoso.example`) grants access, changes roles and deactivates
+  users. The AI service asks the portal (`GET /api/me`, with the user's own token) for the
+  user's role on every request, so admin changes apply to the AI immediately. Unity Catalog
+  governs the AI service's own access to data and models on Databricks.
+- **Role-aware AI tab:** preparing analysts draft their own memos; Credit Officers and
+  Compliance get a read-only review of the AI provenance; the Portal Administrator doesn't
+  see the tab.
 
 ## Run the integrated system locally
 
