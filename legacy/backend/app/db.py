@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     Float,
@@ -12,6 +13,8 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     create_engine,
+    inspect,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
@@ -34,11 +37,16 @@ class Base(DeclarativeBase):
 
 
 class Analyst(Base):
+    """A Credit Portal user account (the table name predates non-analyst users). This is the
+    portal's own entitlement record: the identity provider says who someone is, this table
+    says whether they may use the portal and in which role."""
+
     __tablename__ = "analysts"
     email: Mapped[str] = mapped_column(String(120), primary_key=True)
     name: Mapped[str] = mapped_column(String(120))
     title: Mapped[str] = mapped_column(String(120))
-    role: Mapped[str] = mapped_column(String(20))  # analyst | credit_officer | compliance
+    role: Mapped[str] = mapped_column(String(20))  # analyst | credit_officer | compliance | admin
+    active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
 
 
 class Borrower(Base):
@@ -116,6 +124,15 @@ class ActivityLog(Base):
 
 def init_db() -> None:
     Base.metadata.create_all(engine)
+    _migrate()
+
+
+def _migrate() -> None:
+    """Additive schema changes for databases created by earlier releases."""
+    columns = {c["name"] for c in inspect(engine).get_columns("analysts")}
+    if "active" not in columns:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE analysts ADD active BOOLEAN NOT NULL DEFAULT 1"))
 
 
 def get_session():

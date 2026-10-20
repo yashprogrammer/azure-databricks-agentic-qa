@@ -1,12 +1,16 @@
 """Authentication and authorization for the Credit Portal API.
 
-Who the user is comes ONLY from a validated bearer token: never from a query parameter or a
-request body. Locally the token is issued by the development IdP (app/dev_idp.py); on Azure by
-Microsoft Entra ID. Only the issuer, audience and key source change:
+Authentication (who you are) comes ONLY from a validated bearer token, never from a query
+parameter or a request body. Locally the token is issued by the development IdP
+(app/dev_idp.py); on Azure by Microsoft Entra ID. Only the issuer, audience and key source change:
 
     AUTH_ISSUER    https://login.microsoftonline.com/<tenant-id>/v2.0
     AUTH_AUDIENCE  api://<credit-portal-api-client-id>
     AUTH_JWKS_URL  https://login.microsoftonline.com/<tenant-id>/discovery/v2.0/keys
+
+Authorization (what you may do) is the portal's own: the `analysts` table holds each user's
+role and whether their access is active. It is read on every request, so a role change or a
+deactivation by a portal administrator takes effect immediately, without a new token.
 """
 
 from __future__ import annotations
@@ -28,6 +32,15 @@ AUTH_JWKS_URL = os.environ.get("AUTH_JWKS_URL", "")  # empty: use the in-process
 ANALYST = "Credit.Analyst"
 OFFICER = "Credit.Officer"
 COMPLIANCE = "Compliance.Reviewer"
+ADMIN = "Portal.Admin"
+
+# Portal role (stored in analysts.role) -> permission name used by the API checks.
+PORTAL_ROLES = {
+    "analyst": ANALYST,
+    "credit_officer": OFFICER,
+    "compliance": COMPLIANCE,
+    "admin": ADMIN,
+}
 
 _jwks_client = jwt.PyJWKClient(AUTH_JWKS_URL) if AUTH_JWKS_URL else None
 _bearer = HTTPBearer(auto_error=False)
@@ -38,19 +51,11 @@ class CurrentUser:
     email: str
     name: str
     title: str
+    role: str  # portal role: analyst | credit_officer | compliance | admin
     roles: frozenset[str]
 
     def has(self, *roles: str) -> bool:
         return bool(self.roles.intersection(roles))
-
-    @property
-    def role(self) -> str:
-        """Single display role for the UI (enforcement always uses `roles`)."""
-        if OFFICER in self.roles:
-            return "credit_officer"
-        if COMPLIANCE in self.roles:
-            return "compliance"
-        return "analyst"
 
 
 def _signing_key(token: str):
@@ -77,11 +82,13 @@ def current_user(
     except jwt.PyJWTError as e:
         raise _unauthorized(f"Invalid or expired token: {e}") from e
     email = str(claims.get("preferred_username") or claims.get("email") or "").lower()
-    profile = s.get(Analyst, email)
-    if not profile:
-        raise HTTPException(403, f"{email or 'User'} has no Credit Portal account")
-    return CurrentUser(email=email, name=str(claims.get("name") or profile.name),
-                       title=profile.title, roles=frozenset(claims.get("roles") or []))
+    account = s.get(Analyst, email)
+    if not account:
+        raise HTTPException(403, f"{email or 'User'} has no Credit Portal access")
+    if not account.active:
+        raise HTTPException(403, f"Credit Portal access for {email} has been deactivated")
+    return CurrentUser(email=email, name=account.name, title=account.title, role=account.role,
+                       roles=frozenset({PORTAL_ROLES.get(account.role, account.role)}))
 
 
 def require_role(*roles: str):
@@ -96,3 +103,4 @@ def require_role(*roles: str):
 # Ready-made role dependencies for endpoints.
 analyst_user = require_role(ANALYST)
 officer_user = require_role(OFFICER)
+admin_user = require_role(ADMIN)

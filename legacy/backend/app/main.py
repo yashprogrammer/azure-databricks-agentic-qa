@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.admin import router as admin_router
 from app.auth import CurrentUser, analyst_user, current_user, officer_user
 from app.config import MEMO_SECTIONS, SECTION_TYPES
 from app.db import (
@@ -45,6 +46,8 @@ if os.environ.get("DEV_IDP_ENABLED", "true").lower() == "true":
     from app.dev_idp import router as dev_idp_router
 
     app.include_router(dev_idp_router)  # local development only; Entra ID on Azure
+
+app.include_router(admin_router)  # portal user administration (Portal.Admin only)
 
 
 @app.on_event("startup")
